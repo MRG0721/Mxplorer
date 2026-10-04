@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 mrg
+
 #
 # End-to-end smoke test for the terminal front-end.
 #

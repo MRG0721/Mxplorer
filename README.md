@@ -30,6 +30,7 @@ ctest --test-dir build --output-on-failure    # 冒烟测试
 ```
 mxplorer/
 ├── CMakeLists.txt
+├── LICENSE                   # GPL-3.0-or-later，未改动的 GPLv3 全文
 ├── core/                     # mxplorer_core：没有 Qt、没有打印、没有 exit()、不抛异常
 │   ├── include/mxplorer/
 │   │   ├── callback.hpp      # CancelToken：界面无关的"请求停止"回调
@@ -182,3 +183,13 @@ Qt6 还没安装（`pkg-config --modversion Qt6Core` 目前找不到）。装好
 6. 搜索可以直接拿 `search()` 当后台任务跑：每找到一个就让 `SearchReport::matches`
    增长，用 `on_progress` 更新进度条，用同一个取消令牌接停止按钮；搜索框的过滤
    条件对应 `SearchOptions` 里的 `mode` / `filter` / `include_hidden` / `max_depth`。
+
+## 许可证
+
+GPL-3.0-or-later，全文见 [LICENSE](LICENSE)（未改动的 GPLv3 文本）；Debian 包里对应
+`/usr/share/doc/mxplorer/copyright`。每个源文件头部都有 SPDX 标识。
+
+选 GPLv3 是为了将来接 Qt6 GUI 时能按 GPLv3 选项静态链接 Qt，做成单个自包含的二进制
+包。要注意随之而来的义务：发布静态链接的二进制时，必须提供完整的对应源代码（本项目
+代码 + 所用 Qt 版本源码 + 构建脚本）。LGPLv3 虽然也允许静态链接，但要求让接收者能
+重新链接（例如提供目标文件），GPLv3 没有这层麻烦，代价是整个作品都按 GPLv3 发布。

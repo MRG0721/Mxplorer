@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 mrg
+
 #
 # Builds a .deb for the mxplorer terminal front-end.
 #
