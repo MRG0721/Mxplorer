@@ -143,8 +143,9 @@ md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
 - 复制被中断会留下不完整的文件（和 `cp` 行为一致）。要更稳妥就改成写临时文件
   再 `rename` 到目标。
 - 不保留硬链接、ACL、xattr，也没做稀疏文件优化。
-- 权限不足的目录会被静默跳过（`skip_permission_denied`），只在 `tree` 里显示
-  `[unreadable: ...]`。
+- 目录里个别条目取不到属性时会静默跳过（不报错、不提示）。整棵目录打不开则是
+  硬错误：`ls` 报 `Permission denied`，`tree` 打印 `[unreadable: ...]` 后继续，
+  `cp -r` / `rm -r` 直接失败，不会产出不完整的副本。
 - 不支持 `~user`。
 - `cp` 的默认权限沿用 `umask`，`-p` 才会复制权限位（且不会复制 setuid/setgid）。
 
