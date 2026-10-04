@@ -189,6 +189,28 @@ if [[ "$cwd_exit" != "0" && "$cwd_exit" != "1" ]]; then
 fi
 ok
 
+# An unreadable directory must be reported, not silently passed off as empty.
+# Skipped as root, where file permissions do not apply.
+if [[ "$(id -u)" != "0" ]]; then
+    mkdir -p "$WORK/locked/inner"
+    echo "secret" >"$WORK/locked/inner/file.txt"
+    chmod 000 "$WORK/locked"
+
+    expect_fail "$FMAN" ls "$WORK/locked"
+    out="$("$FMAN" ls "$WORK/locked" 2>&1 || true)"
+    contains "$out" "Permission denied"
+
+    out="$("$FMAN" tree "$WORK" 2>&1 || true)"
+    contains "$out" "[unreadable: Permission denied]"
+
+    # A recursive copy must fail instead of quietly copying a partial tree.
+    expect_fail "$FMAN" cp -r "$WORK/locked" "$WORK/locked-copy"
+    expect_fail "$FMAN" rm -r "$WORK/locked"
+
+    chmod 755 "$WORK/locked"
+    rm -rf "$WORK/locked-copy"
+fi
+
 # --------------------------------------------------------- interactive ----
 mkdir -p "my dir"
 echo "spaced" >"my dir/spaced file.txt"

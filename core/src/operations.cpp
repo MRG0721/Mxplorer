@@ -233,7 +233,9 @@ Error copy_directory(const fs::path& source, const fs::path& destination,
 
     // Collect first: the directory must not be modified while we walk it.
     std::vector<fs::path> children;
-    fs::directory_iterator iterator(source, fs::directory_options::skip_permission_denied, ec);
+    // No skip_permission_denied here: an unreadable directory has to fail the
+    // copy instead of silently producing an incomplete one.
+    fs::directory_iterator iterator(source, fs::directory_options::none, ec);
     if (ec) {
         return error_from_std(ec, source);
     }
@@ -403,7 +405,7 @@ Error remove_entry(const fs::path& target, const OperationOptions& options,
 
     if (fs::is_directory(status)) {
         std::vector<fs::path> children;
-        fs::directory_iterator iterator(target, fs::directory_options::skip_permission_denied, ec);
+        fs::directory_iterator iterator(target, fs::directory_options::none, ec);
         if (ec) {
             return error_from_std(ec, target);
         }

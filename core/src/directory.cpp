@@ -188,7 +188,9 @@ Result<std::vector<FileEntry>> list_directory(const std::filesystem::path& direc
     }
 
     std::vector<FileEntry> entries;
-    fs::directory_iterator iterator(directory, fs::directory_options::skip_permission_denied, ec);
+    // Note: skip_permission_denied would swallow the EACCES raised when the
+    // directory itself cannot be opened and turn "not readable" into "empty".
+    fs::directory_iterator iterator(directory, fs::directory_options::none, ec);
     if (ec) {
         return error_from_std(ec, directory);
     }
