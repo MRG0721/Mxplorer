@@ -117,11 +117,11 @@ md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
 - 维护者署名是 `MRG0721 <271227737+MRG0721@users.noreply.github.com>`：提交作者、
   Debian 包的 `Maintainer`、man page 的作者行都用这个身份。邮箱用的是 GitHub 提供的
   noreply 地址，提交能关联到账号，我不希望暴露真实邮箱。
-- 依赖是**在本机算出来**的（`libc6 (>= 2.38)`、`libstdc++6 (>= 16)`，因为这里是
+- 依赖是**在本机算出来**的（`libc6 (>= 2.38)`、`libgcc-s1 (>= 3.0)`、`libstdc++6 (>= 16)`，因为这里是
   forky + GCC 16）。也就是说这个包只能装在不低于本机版本的系统上，Debian 13 或
   Ubuntu 26.04 这些东西可能会因为 libstdc++ 太旧而装不上。要支持更老的目标系统，得用
   debootstrap/容器在目标发行版里构建。
-- 暂时**不考虑**兼容性: 我暂时是不考虑对于所有系统的兼容性的，正如上一条所言，"依赖
+- 暂时**不考虑**兼容性：我暂时是不考虑对于所有系统的兼容性的，正如上一条所言，"依赖
   是在本机算出来的"。我现阶段毕竟还是开发初期，该项目目前本就是稚嫩的。
 
 之后想补的：`debian/` 正式源码包布局 + debhelper（这样 `dpkg-buildpackage`、
@@ -178,7 +178,7 @@ md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
 统一使用 **Allman** 花括号风格：任何左花括号都独占一行（命名空间、类定义、函数、
 `if` / `else` / `for` / `while` / `switch`、lambda、构造函数初始化列表之后都是如此）。
 风格由仓库根目录的 `.clang-format` 固化：4 空格缩进、100 列、注释与 include 不重排、
-短函数不压成单行（`switch` 里的 `case X: return Y;` 允许保持一行）。
+短函数不压成单行，唯一的例外是 `switch` 里的 `case X: return Y;`，它允许保持一行。
 
 ## 许可证
 

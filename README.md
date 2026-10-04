@@ -32,7 +32,7 @@ cmake --build build
 ctest --test-dir build --output-on-failure    # smoke test
 ```
 
-## Directory
+## Project layout
 
 ```
 mxplorer/
@@ -60,7 +60,7 @@ mxplorer/
 ## Usage
 
 Interactive mode
-(the prompt shows the current directory，and `cd` state is preserved):
+(the prompt shows the current directory, and `cd` state is preserved):
 
 ```
 $ ./build/cli/mxplorer
@@ -89,7 +89,7 @@ the command's result (so it can be used directly in scripts):
 | `mkdir [-p] path...` | Create directories; `-p` creates parent directories and is silent about already-existing ones |
 | `stat path...` | Show type, size, mtime, permission bits |
 | `tree [path] [-L depth]` | Print a directory tree |
-| `find <pattern> [path] [选项]` / `search` | search Search by name, printing absolute paths one per line; `-i` ignore case, `-E` regex, `-F` literal, `-l` long format, `-a` include hidden, `-t f\|d\|l` type, `-d N` depth, `-n N` limit |
+| `find <pattern> [path] [options]` / `search` | Search by name, printing absolute paths one per line; `-i` ignore case, `-E` regex, `-F` literal, `-l` long format, `-a` include hidden, `-t f\|d\|l` type, `-d N` depth, `-n N` limit |
 | `help` / `clear` / `exit` | — |
 
 Paths support `~`, `~`/relative/path, `-`, as well as `'single quotes'`, 
@@ -129,7 +129,7 @@ Notes:
   The email is the noreply address GitHub provides, so commits can be linked to 
   the account, and I don't want to expose my real email.
 - Dependencies are **computed on this machine** 
-(libc6 (>= 2.38), libstdc++6 (>= 16), since this is forky + GCC 16). 
+(`libc6 (>= 2.38)`, `libgcc-s1 (>= 3.0)`, `libstdc++6 (>= 16)`, since this is forky + GCC 16). 
 In other words, this package can only be installed on systems no older than 
 this one; things like Debian 13 or Ubuntu 26.04 may fail to install 
 because their libstdc++ is too old. To support older target systems, you'd 
@@ -154,8 +154,8 @@ All functions return `Result<T>` or `Error` (`ErrorCode` + message + path);
 only `cli/` decides how to present them. On the Qt side, 
 this just becomes `QMessageBox` / `statusBar`.
 
-2. **FileEntry is pure data**. When writing a `QAbstractItemModel` later, 
-feed it to the view — no need to change core. list_directory() is 
+2. **`FileEntry` is pure data**. When writing a `QAbstractItemModel` later, 
+feed it to the view — no need to change core. `list_directory()` is 
 a stateless call: path in, array of entries out.
 
 3. **Long-running operations carry their own progress and cancellation**. 
@@ -195,7 +195,7 @@ Deliberately left as known gaps:
 - When attributes can't be read for an individual entry in a directory, 
   it's silently skipped (no error, no notice). If an entire directory can't 
   be opened, that's a hard error: `ls` reports `Permission denied`, 
-  tree prints `[unreadable: ...]` and continues, and `cp -r` / `rm -r` 
+  `tree` prints `[unreadable: ...]` and continues, and `cp -r` / `rm -r` 
 fail outright rather than producing an incomplete copy.
 - `~user` is not supported.
 - `cp` uses the `umask` for default permissions; only `-p` copies permission 
@@ -216,8 +216,8 @@ fail outright rather than producing an incomplete copy.
 and after constructor initializer lists — all of them). 
 The style is pinned by the `.clang-format` at the repo root: 4-space indent, 
 100 columns, comments and includes not reordered, and short functions not 
-collapsed onto a single line 
-(`case X: return Y`; inside `switch` is allowed to stay on one line).
+collapsed onto a single line. The only exception is that `case X: return Y;` 
+inside a `switch` is allowed to stay on one line.
 
 ## License
 
