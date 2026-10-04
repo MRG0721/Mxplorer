@@ -42,7 +42,12 @@ public:
         emit(false);
     }
 
-    void finish() { emit(true); }
+    /// Prints nothing when the caller already reported the final state.
+    void finish() {
+        if (bytes_ != last_bytes_ || items_ != last_items_) {
+            emit(true);
+        }
+    }
 
 private:
     void emit(bool force) {
@@ -116,6 +121,10 @@ TreeStats scan_tree(const fs::path& path) {
         }
         return stats;
     }
+
+    // The directory itself counts as one item: copy_entry() and remove_entry()
+    // report it as well, so without this the progress would overrun the total.
+    stats.items = 1;
 
     fs::recursive_directory_iterator iterator(
         path, fs::directory_options::skip_permission_denied, ec);
