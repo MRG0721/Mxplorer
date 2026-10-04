@@ -1,18 +1,18 @@
-add_executable(fman_cli
+add_executable(dentry_cli
     src/main.cpp
     src/shell.cpp)
 
-target_link_libraries(fman_cli PRIVATE fman_core)
+target_link_libraries(dentry_cli PRIVATE dentry_core)
 
-target_compile_definitions(fman_cli PRIVATE FMAN_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(dentry_cli PRIVATE DENTRY_VERSION="${PROJECT_VERSION}")
 
-install(TARGETS fman_cli RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+install(TARGETS dentry_cli RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(fman_cli PRIVATE -Wall -Wextra -Wpedantic)
-    if(FMAN_WARNINGS_AS_ERRORS)
-        target_compile_options(fman_cli PRIVATE -Werror)
+    target_compile_options(dentry_cli PRIVATE -Wall -Wextra -Wpedantic)
+    if(DENTRY_WARNINGS_AS_ERRORS)
+        target_compile_options(dentry_cli PRIVATE -Werror)
     endif()
 endif()
 
-set_target_properties(fman_cli PROPERTIES OUTPUT_NAME fman)
+set_target_properties(dentry_cli PROPERTIES OUTPUT_NAME dentry)

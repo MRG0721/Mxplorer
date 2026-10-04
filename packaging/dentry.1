@@ -1,11 +1,11 @@
-.TH FMAN 1 "2026-09-29" "fman @VERSION@" "User Commands"
+.TH DENTRY 1 "2026-09-29" "dentry @VERSION@" "User Commands"
 .SH NAME
-fman \- terminal file manager built on a UI independent core
+dentry \- terminal file manager built on a UI independent core
 .SH SYNOPSIS
-.B fman
+.B dentry
 .RI [ command " [" argument " ...]]"
 .SH DESCRIPTION
-.B fman
+.B dentry
 is a small file manager for Linux.
 Started without arguments it prints a prompt and executes commands until you
 leave it, so the current directory is kept between commands.
@@ -152,16 +152,16 @@ Show the version.
 .SH EXAMPLES
 .TP
 List the current directory, hidden entries included:
-.B fman ls -a
+.B dentry ls -a
 .TP
 Copy a tree and keep permission bits:
-.B fman cp -rp src backup/
+.B dentry cp -rp src backup/
 .TP
 Show two levels of the hierarchy below the home directory:
-.B fman tree ~ -L 2
+.B dentry tree ~ -L 2
 .TP
 Find PDFs anywhere below the home directory, longest list limited to 20:
-.B fman find '*.pdf' ~ -n 20
+.B dentry find '*.pdf' ~ -n 20
 .SH "EXIT STATUS"
 .B 0
 on success,

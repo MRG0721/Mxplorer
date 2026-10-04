@@ -1,7 +1,7 @@
-#include "fman/search.hpp"
+#include "dentry/search.hpp"
 
-#include "fman/directory.hpp"
-#include "fman/path_utils.hpp"
+#include "dentry/directory.hpp"
+#include "dentry/path_utils.hpp"
 
 #include <cctype>
 #include <fnmatch.h>
@@ -9,7 +9,7 @@
 #include <string_view>
 #include <utility>
 
-namespace fman {
+namespace dentry {
 namespace {
 
 namespace fs = std::filesystem;
@@ -255,4 +255,4 @@ Result<SearchReport> search(const fs::path& root, const SearchOptions& options) 
     return report;
 }
 
-} // namespace fman
+} // namespace dentry

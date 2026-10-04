@@ -1,5 +1,5 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: fman
+Upstream-Name: dentry
 
 Files: *
 Copyright: 2026 mrg <mrg@localhost>

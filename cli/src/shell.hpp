@@ -1,11 +1,11 @@
 #pragma once
 //
 // The terminal front-end. It owns a Session, parses a command line, calls into
-// fman_core and prints the result. It contains no file system logic of its own,
+// dentry_core and prints the result. It contains no file system logic of its own,
 // which is exactly why a Qt6 front-end can be added later without touching core.
 //
 
-#include "fman/session.hpp"
+#include "dentry/session.hpp"
 
 #include <functional>
 #include <map>
@@ -13,7 +13,7 @@
 #include <string_view>
 #include <vector>
 
-namespace fman::cli {
+namespace dentry::cli {
 
 /// Version string, taken from the project version at build time.
 std::string_view version();
@@ -71,4 +71,4 @@ private:
     bool running_ = true;
 };
 
-} // namespace fman::cli
+} // namespace dentry::cli

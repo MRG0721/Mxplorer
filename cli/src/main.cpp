@@ -8,13 +8,13 @@
 int main(int argc, char** argv) {
     std::setlocale(LC_ALL, "");
 
-    fman::cli::Shell shell;
+    dentry::cli::Shell shell;
 
-    // "fman ls -l /tmp" runs a single command instead of starting a prompt.
+    // "dentry ls -l /tmp" runs a single command instead of starting a prompt.
     if (argc > 1) {
         const std::string first = argv[1];
         if (first == "--version" || first == "-V") {
-            std::cout << "fman " << fman::cli::version() << '\n';
+            std::cout << "dentry " << dentry::cli::version() << '\n';
             return 0;
         }
         if (first == "--help" || first == "-h") {

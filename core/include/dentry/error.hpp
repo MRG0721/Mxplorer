@@ -12,7 +12,7 @@
 #include <system_error>
 #include <utility>
 
-namespace fman {
+namespace dentry {
 
 enum class ErrorCode {
     ok = 0,
@@ -69,4 +69,4 @@ private:
     Error error_{};
 };
 
-} // namespace fman
+} // namespace dentry

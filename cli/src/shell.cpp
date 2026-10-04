@@ -1,10 +1,10 @@
 #include "shell.hpp"
 
-#include "fman/directory.hpp"
-#include "fman/entry.hpp"
-#include "fman/operations.hpp"
-#include "fman/path_utils.hpp"
-#include "fman/search.hpp"
+#include "dentry/directory.hpp"
+#include "dentry/entry.hpp"
+#include "dentry/operations.hpp"
+#include "dentry/path_utils.hpp"
+#include "dentry/search.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -20,13 +20,13 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-namespace fman::cli {
+namespace dentry::cli {
 namespace {
 
 namespace fs = std::filesystem;
 
-#ifndef FMAN_VERSION
-#define FMAN_VERSION "0.0.0"
+#ifndef DENTRY_VERSION
+#define DENTRY_VERSION "0.0.0"
 #endif
 
 constexpr std::string_view kReset = "\033[0m";
@@ -377,7 +377,7 @@ void print_tree(const fs::path& directory,
 } // namespace
 
 std::string_view version() {
-    return FMAN_VERSION;
+    return DENTRY_VERSION;
 }
 
 Shell::Shell() : session_() {
@@ -506,11 +506,11 @@ int Shell::run_command(const std::vector<std::string>& args) {
 }
 
 void Shell::print_banner() const {
-    std::cout << std::format("fman {} | type 'help' for commands, 'exit' to quit\n", version());
+    std::cout << std::format("dentry {} | type 'help' for commands, 'exit' to quit\n", version());
 }
 
 void Shell::print_prompt() const {
-    std::cout << paint("fman", kBoldBlue) << ':'
+    std::cout << paint("dentry", kBoldBlue) << ':'
               << paint(session_.pretty(session_.cwd()), kBoldGreen) << "$ " << std::flush;
 }
 
@@ -1023,4 +1023,4 @@ int Shell::cmd_exit(const Args& args) {
     return 0;
 }
 
-} // namespace fman::cli
+} // namespace dentry::cli

@@ -1,13 +1,13 @@
 #pragma once
 
-#include "fman/entry.hpp"
-#include "fman/error.hpp"
+#include "dentry/entry.hpp"
+#include "dentry/error.hpp"
 
 #include <filesystem>
 #include <string_view>
 #include <vector>
 
-namespace fman {
+namespace dentry {
 
 enum class SortKey {
     name,
@@ -43,4 +43,4 @@ bool path_exists(const std::filesystem::path& path);
 /// Case-insensitive comparison that orders "file2" before "file10".
 int compare_natural(std::string_view left, std::string_view right);
 
-} // namespace fman
+} // namespace dentry

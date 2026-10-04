@@ -1,4 +1,4 @@
-fman (@VERSION@) unstable; urgency=low
+dentry (@VERSION@) unstable; urgency=low
 
   * Initial packaging of the terminal front-end.
 

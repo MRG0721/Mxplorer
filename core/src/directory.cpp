@@ -1,12 +1,12 @@
-#include "fman/directory.hpp"
+#include "dentry/directory.hpp"
 
-#include "fman/path_utils.hpp"
+#include "dentry/path_utils.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <system_error>
 
-namespace fman {
+namespace dentry {
 namespace {
 
 EntryType classify(const std::filesystem::file_status& status) {
@@ -237,4 +237,4 @@ bool path_exists(const std::filesystem::path& path) {
     return !ec && std::filesystem::exists(status);
 }
 
-} // namespace fman
+} // namespace dentry

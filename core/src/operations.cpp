@@ -1,6 +1,6 @@
-#include "fman/operations.hpp"
+#include "dentry/operations.hpp"
 
-#include "fman/path_utils.hpp"
+#include "dentry/path_utils.hpp"
 
 #include <algorithm>
 #include <array>
@@ -8,7 +8,7 @@
 #include <system_error>
 #include <vector>
 
-namespace fman {
+namespace dentry {
 namespace {
 
 namespace fs = std::filesystem;
@@ -563,4 +563,4 @@ Error create_directory(const fs::path& target, bool parents) {
     return Error{};
 }
 
-} // namespace fman
+} // namespace dentry

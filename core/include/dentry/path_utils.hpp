@@ -4,7 +4,7 @@
 #include <string>
 #include <string_view>
 
-namespace fman {
+namespace dentry {
 
 /// std::filesystem::path -> UTF-8 bytes. Both a terminal and Qt want UTF-8.
 std::string to_utf8(const std::filesystem::path& path);
@@ -25,4 +25,4 @@ std::string pretty_path(const std::filesystem::path& path,
 /// True for "/" and for paths that normalize to it, such as "/." or "/tmp/..".
 bool is_filesystem_root(const std::filesystem::path& path);
 
-} // namespace fman
+} // namespace dentry

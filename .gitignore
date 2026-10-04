@@ -11,7 +11,7 @@ compile_commands.json
 CMakeUserPresets.json
 
 # binaries
-/cli/fman
+/cli/dentry
 
 # package output
 /dist/

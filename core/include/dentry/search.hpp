@@ -4,9 +4,9 @@
 // the front-end: it walks the tree, applies a matcher and returns plain
 // FileEntry values, which is exactly what a Qt6 item model wants to display.
 
-#include "fman/callback.hpp"
-#include "fman/entry.hpp"
-#include "fman/error.hpp"
+#include "dentry/callback.hpp"
+#include "dentry/entry.hpp"
+#include "dentry/error.hpp"
 
 #include <cstddef>
 #include <filesystem>
@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-namespace fman {
+namespace dentry {
 
 enum class MatchMode {
     glob,      ///< '*', '?' and '[...]' wildcards, matched against the name
@@ -97,4 +97,4 @@ Result<SearchReport> search(const std::filesystem::path& root,
 /// bad pattern before starting a long search.
 Error validate_search_options(const SearchOptions& options);
 
-} // namespace fman
+} // namespace dentry

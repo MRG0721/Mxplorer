@@ -1,10 +1,10 @@
-#include "fman/entry.hpp"
+#include "dentry/entry.hpp"
 
 #include <chrono>
 #include <ctime>
 #include <format>
 
-namespace fman {
+namespace dentry {
 
 const char* describe(EntryType type) {
     switch (type) {
@@ -88,4 +88,4 @@ std::string format_time(const FileEntry& entry) {
     return format_time(entry.modified);
 }
 
-} // namespace fman
+} // namespace dentry

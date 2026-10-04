@@ -1,8 +1,8 @@
-#include "fman/error.hpp"
+#include "dentry/error.hpp"
 
-#include "fman/path_utils.hpp"
+#include "dentry/path_utils.hpp"
 
-namespace fman {
+namespace dentry {
 
 const char* describe(ErrorCode code) {
     switch (code) {
@@ -73,4 +73,4 @@ Error error_from_std(const std::error_code& code, const std::filesystem::path& p
     return Error(mapped, code.message(), path);
 }
 
-} // namespace fman
+} // namespace dentry

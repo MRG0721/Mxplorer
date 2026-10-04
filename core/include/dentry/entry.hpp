@@ -9,7 +9,7 @@
 #include <filesystem>
 #include <string>
 
-namespace fman {
+namespace dentry {
 
 enum class EntryType {
     file,
@@ -50,4 +50,4 @@ std::string format_time(std::filesystem::file_time_type time);
 /// "-" when the timestamp could not be read, otherwise the formatted time.
 std::string format_time(const FileEntry& entry);
 
-} // namespace fman
+} // namespace dentry

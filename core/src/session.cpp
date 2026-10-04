@@ -1,8 +1,8 @@
-#include "fman/session.hpp"
+#include "dentry/session.hpp"
 
-#include "fman/path_utils.hpp"
+#include "dentry/path_utils.hpp"
 
-namespace fman {
+namespace dentry {
 namespace {
 
 /// current_path() throws when the working directory has been deleted, which
@@ -86,4 +86,4 @@ std::string Session::pretty(const std::filesystem::path& path) const {
     return pretty_path(path, home_);
 }
 
-} // namespace fman
+} // namespace dentry
