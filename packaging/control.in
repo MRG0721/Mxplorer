@@ -11,8 +11,8 @@ Description: terminal file manager with a UI independent core
  interactive shell plus a one-shot command mode, on top of a C++ core library
  that does the file system work and stays free of any UI toolkit.
  .
- The core offers directory listing, stat, copy, move, remove, mkdir, progress
- callbacks and cancellation, so a Qt6 front-end can be added later without
- touching the file system logic.
+ The core offers directory listing, stat, copy, move, remove, mkdir, name based
+ search, progress callbacks and cancellation, so a Qt6 front-end can be added
+ later without touching the file system logic.
  .
  This package contains the fman command and its manual page.

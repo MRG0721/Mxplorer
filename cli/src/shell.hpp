@@ -7,22 +7,16 @@
 
 #include "fman/session.hpp"
 
-#include <filesystem>
 #include <functional>
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace fman::cli {
 
 /// Version string, taken from the project version at build time.
 std::string_view version();
-
-struct OperationFlags {
-    bool force = false;
-    bool recursive = false;
-    bool preserve_permissions = false;
-};
 
 class Shell {
 public:
@@ -75,7 +69,6 @@ private:
     Session session_;
     std::map<std::string, Command> commands_;
     bool running_ = true;
-    int last_status_ = 0;
 };
 
 } // namespace fman::cli

@@ -500,9 +500,9 @@ int Shell::run_command(const std::vector<std::string>& args) {
     std::vector<std::string> forwarded = it->second.prefix;
     forwarded.insert(forwarded.end(), args.begin() + 1, args.end());
 
-    last_status_ = it->second.handler(forwarded);
+    const int status = it->second.handler(forwarded);
     std::signal(SIGINT, previous_handler);
-    return last_status_;
+    return status;
 }
 
 void Shell::print_banner() const {

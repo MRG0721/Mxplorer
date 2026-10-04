@@ -4,10 +4,14 @@
 所有文件系统逻辑集中在一个不依赖任何 UI 的静态库 `fman_core` 里，
 将来的 Qt6 前端只是再加一个可执行文件，不碰 core。
 
+项目还在开发中，没有发布，也不做版本迭代；`build/`、`dist/` 这类产物随时可以删掉
+重新生成。
+
 ## 构建
 
 需要 CMake 3.20+、支持 C++20 的编译器（GCC 13+ / Clang 16+）。
-除标准库外只用到 POSIX 的 `unistd.h` / `pwd.h` / `sys/ioctl.h`。
+除标准库外只用到几个 POSIX 接口：core 用 `pwd.h`（取家目录）和 `fnmatch.h`（检索
+的通配符匹配），前端用 `unistd.h` / `sys/ioctl.h`（终端判断与宽度）和 `signal.h`。
 
 ```sh
 cmake -S . -B build -G Ninja
@@ -23,7 +27,7 @@ ctest --test-dir build --output-on-failure    # 冒烟测试
 ```
 fman/
 ├── CMakeLists.txt
-├── core/                     # fman_core：纯标准库，没有 Qt、没有打印、没有 exit()
+├── core/                     # fman_core：没有 Qt、没有打印、没有 exit()、不抛异常
 │   ├── include/fman/
 │   │   ├── callback.hpp      # CancelToken：界面无关的"请求停止"回调
 │   │   ├── error.hpp         # ErrorCode / Error / Result<T>
@@ -128,7 +132,9 @@ md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
    `OperationOptions`，其中 `on_progress` 是回调、`is_cancelled` 是取消令牌。
    终端前端把回调实现成一行 `\r` 刷新的进度条，Qt 前端把它实现成 emit signal，
    core 的签名不用动。Ctrl-C 也接到同一个取消令牌上：复制到一半按 Ctrl-C
-   会得到一个干净的 `cancelled` 错误，而不是把进程打死。
+   会得到一个干净的 `cancelled` 错误，而不是把进程打死。检索用的是同一套约定
+   （`SearchOptions::on_progress` 与 `is_cancelled`），只是进度字段换成了已扫描
+   条目数。
 
 4. **UI 状态放在 `Session`**。它只保存 cwd、home、上一个目录，并负责把用户
    输入解析成绝对路径。Qt 前端同样复用它。
