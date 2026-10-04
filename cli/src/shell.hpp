@@ -43,6 +43,7 @@ private:
         std::string description;
         Handler handler;
         Args prefix{}; ///< extra arguments injected first, used by aliases
+        std::string details{}; ///< extra lines printed by "help <command>"
     };
 
     void register_commands();
@@ -64,6 +65,7 @@ private:
     int cmd_mkdir(const Args& args);
     int cmd_stat(const Args& args);
     int cmd_tree(const Args& args);
+    int cmd_find(const Args& args);
     int cmd_clear(const Args& args);
     int cmd_exit(const Args& args);
 

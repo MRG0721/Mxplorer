@@ -1,5 +1,6 @@
 #pragma once
 
+#include "fman/callback.hpp"
 #include "fman/error.hpp"
 
 #include <cstddef>
@@ -21,9 +22,6 @@ struct OperationProgress {
 
 /// The terminal front-end prints this; a Qt6 front-end would emit a signal.
 using ProgressCallback = std::function<void(const OperationProgress&)>;
-
-/// Returning true asks the operation to stop at the next safe point.
-using CancelToken = std::function<bool()>;
 
 struct OperationOptions {
     bool overwrite = false;

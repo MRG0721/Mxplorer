@@ -4,6 +4,7 @@
 #include "fman/entry.hpp"
 #include "fman/operations.hpp"
 #include "fman/path_utils.hpp"
+#include "fman/search.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -12,7 +13,9 @@
 #include <cstdio>
 #include <format>
 #include <iostream>
+#include <optional>
 #include <set>
+#include <stdexcept>
 #include <string_view>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -32,6 +35,7 @@ constexpr std::string_view kBoldGreen = "\033[1;32m";
 constexpr std::string_view kCyan = "\033[36m";
 constexpr std::string_view kDim = "\033[2m";
 constexpr std::string_view kRed = "\033[31m";
+constexpr std::string_view kYellow = "\033[33m";
 
 /// Set from the SIGINT handler, read by the CancelToken given to core.
 std::atomic<bool> g_interrupted{false};
@@ -50,6 +54,11 @@ bool stdout_is_terminal() {
     return value;
 }
 
+bool stderr_is_terminal() {
+    static const bool value = ::isatty(STDERR_FILENO) != 0;
+    return value;
+}
+
 std::string paint(std::string_view text, std::string_view color) {
     if (!stdout_is_terminal()) {
         return std::string(text);
@@ -57,9 +66,14 @@ std::string paint(std::string_view text, std::string_view color) {
     return std::string(color) + std::string(text) + std::string(kReset);
 }
 
-std::size_t terminal_width() {
+/// "1 match" / "3 matches", so the summary reads like a sentence.
+std::string plural(std::size_t count, std::string_view singular, std::string_view many) {
+    return std::format("{} {}", count, count == 1 ? singular : many);
+}
+
+std::size_t terminal_width(int fd = STDOUT_FILENO) {
     struct winsize size {};
-    if (::ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) == 0 && size.ws_col > 0) {
+    if (::ioctl(fd, TIOCGWINSZ, &size) == 0 && size.ws_col > 0) {
         return size.ws_col;
     }
     return 80;
@@ -205,6 +219,54 @@ private:
     bool printed_ = false;
 };
 
+/// Status line for a running search. It is written to standard error so that
+/// the matches on standard output stay clean for pipes and redirection.
+class SearchProgressRenderer {
+public:
+    void operator()(const SearchProgress& progress) {
+        if (!stderr_is_terminal()) {
+            return;
+        }
+
+        std::string directory = to_utf8(progress.current_directory);
+        const std::string counters =
+            std::format("  {} entries  {} matches", progress.entries, progress.matches);
+
+        const std::size_t width = terminal_width(STDERR_FILENO);
+        const std::size_t fixed = std::string("searching ").size() + counters.size();
+        const std::size_t room = width > fixed + 8 ? width - fixed : 16;
+        if (directory.size() > room) {
+            std::size_t start = directory.size() - room;
+            // Never cut a UTF-8 sequence in half.
+            while (start < directory.size() &&
+                   (static_cast<unsigned char>(directory[start]) & 0xC0) == 0x80) {
+                ++start;
+            }
+            directory = "..." + directory.substr(start);
+        }
+
+        std::string line = "searching " + directory + counters;
+        if (line.size() < last_length_) {
+            line.append(last_length_ - line.size(), ' ');
+        }
+        last_length_ = line.size();
+        std::cerr << '\r' << line << std::flush;
+        printed_ = true;
+    }
+
+    void clear() {
+        if (!printed_) {
+            return;
+        }
+        std::cerr << '\r' << std::string(last_length_, ' ') << '\r' << std::flush;
+        printed_ = false;
+    }
+
+private:
+    std::size_t last_length_ = 0;
+    bool printed_ = false;
+};
+
 void print_short_listing(const std::vector<FileEntry>& entries) {
     std::vector<std::string> plain;
     std::vector<std::string> coloured;
@@ -250,20 +312,25 @@ void print_short_listing(const std::vector<FileEntry>& entries) {
     }
 }
 
+/// One line of an "ls -l" style listing. The label is the name for ls, and the
+/// full path for find.
+void print_long_line(const FileEntry& entry, const std::string& label) {
+    const std::string size = entry.is_directory() ? std::string("-") : format_size(entry.size);
+    std::cout << std::format("{}{} {:>9} {} {}\n",
+                             type_char(entry.type),
+                             format_permissions(entry.permissions),
+                             size,
+                             format_time(entry),
+                             label);
+}
+
 void print_long_listing(const std::vector<FileEntry>& entries) {
     for (const FileEntry& entry : entries) {
         std::string label = entry.name;
         if (entry.is_directory()) {
             label += '/';
         }
-
-        const std::string size = entry.is_directory() ? std::string("-") : format_size(entry.size);
-        std::cout << std::format("{}{} {:>9} {} {}\n",
-                                 type_char(entry.type),
-                                 format_permissions(entry.permissions),
-                                 size,
-                                 format_time(entry),
-                                 label);
+        print_long_line(entry, label);
     }
 }
 
@@ -322,12 +389,14 @@ void Shell::register_commands() {
                       std::string usage,
                       std::string description,
                       Handler handler,
-                      Args prefix = {}) {
+                      Args prefix = {},
+                      std::string details = {}) {
         Command command;
         command.usage = std::move(usage);
         command.description = std::move(description);
         command.handler = std::move(handler);
         command.prefix = std::move(prefix);
+        command.details = std::move(details);
         commands_.emplace(std::move(name), std::move(command));
     };
 
@@ -353,6 +422,28 @@ void Shell::register_commands() {
         [this](const Args& args) { return cmd_stat(args); });
     add("tree", "tree [path] [-L depth]", "draw the directory hierarchy",
         [this](const Args& args) { return cmd_tree(args); });
+
+    const std::string find_details = R"TXT(  -i            ignore case
+  -E            treat the pattern as an ECMAScript regular expression
+  -F            treat the pattern as plain text (substring match)
+  -l            long format for each match (permissions, size, modified time)
+  -a            include hidden entries
+  -t f|d|l      only regular files, only directories, or only symlinks
+  -d <depth>    do not descend deeper than this (1 = the root's own entries)
+  -n <count>    stop after this many matches
+
+  The pattern is matched against the entry name, not the whole path. Without -E
+  or -F it is a glob ('*', '?' and '[...]'); a glob that contains no wildcard is
+  treated as "*pattern*", so "report" also finds "quarterly-report.pdf".
+  Symbolic links are never followed and the root itself is not a candidate.
+  Matches are printed to standard output, one absolute path per line; the
+  summary and any warnings go to standard error so that the output can be piped.
+)TXT";
+
+    add("find", "find <pattern> [path] [options]", "search for entries by name",
+        [this](const Args& args) { return cmd_find(args); }, {}, find_details);
+    add("search", "search <pattern> [path]", "alias of find, same options",
+        [this](const Args& args) { return cmd_find(args); });
     add("clear", "clear", "clear the screen",
         [this](const Args& args) { return cmd_clear(args); });
     add("exit", "exit", "leave the shell",
@@ -436,7 +527,8 @@ void Shell::print_help() const {
                   << command.description << '\n';
     }
     std::cout << "\nFlags: -a all (hidden files too), -l long format, -r recursive, "
-                 "-f overwrite/ignore missing, -p keep permissions.\n";
+                 "-f overwrite/ignore missing, -p keep permissions.\n"
+                 "find has its own options: run 'help find'.\n";
 }
 
 int Shell::fail(const Error& error) {
@@ -478,6 +570,9 @@ int Shell::cmd_help(const Args& args) {
         return fail(std::format("help: unknown command '{}'", args.front()));
     }
     std::cout << "  " << it->second.usage << "  " << it->second.description << '\n';
+    if (!it->second.details.empty()) {
+        std::cout << '\n' << it->second.details;
+    }
     return 0;
 }
 
@@ -761,6 +856,153 @@ int Shell::cmd_tree(const Args& args) {
     print_tree(root, "", 0, max_depth, totals);
     std::cout << std::format("\n{} directories, {} files\n", totals.directories, totals.files);
     return 0;
+}
+
+int Shell::cmd_find(const Args& args) {
+    SearchOptions options;
+    std::string target = ".";
+    bool long_format = false;
+    std::vector<std::string> positional;
+
+    // "-t f" and "-tf" are both accepted, like the other value options below.
+    const auto take_value = [&args](std::size_t& index, const std::string& arg,
+                                    std::string_view flag) -> std::optional<std::string> {
+        if (arg.size() > flag.size()) {
+            return arg.substr(flag.size());
+        }
+        if (index + 1 < args.size()) {
+            return args[++index];
+        }
+        return std::nullopt;
+    };
+
+    const auto parse_number = [](const std::string& text, long long& value) {
+        try {
+            std::size_t consumed = 0;
+            const long long parsed = std::stoll(text, &consumed);
+            if (consumed != text.size() || parsed < 0) {
+                return false;
+            }
+            value = parsed;
+            return true;
+        } catch (const std::exception&) {
+            return false;
+        }
+    };
+
+    for (std::size_t i = 0; i < args.size(); ++i) {
+        const std::string& arg = args[i];
+
+        if (arg == "-i") {
+            options.case_sensitive = false;
+        } else if (arg == "-E") {
+            options.mode = MatchMode::regex;
+        } else if (arg == "-F") {
+            options.mode = MatchMode::substring;
+        } else if (arg == "-l") {
+            long_format = true;
+        } else if (arg == "-a") {
+            options.include_hidden = true;
+        } else if (arg.rfind("-t", 0) == 0) {
+            const std::optional<std::string> value = take_value(i, arg, "-t");
+            if (!value) {
+                return fail("find: -t needs a type (f, d or l)");
+            }
+            if (*value == "f") {
+                options.filter = EntryFilter::file;
+            } else if (*value == "d") {
+                options.filter = EntryFilter::directory;
+            } else if (*value == "l") {
+                options.filter = EntryFilter::symlink;
+            } else {
+                return fail("find: -t expects f, d or l, got '" + *value + "'");
+            }
+        } else if (arg.rfind("-d", 0) == 0) {
+            const std::optional<std::string> value = take_value(i, arg, "-d");
+            long long depth = 0;
+            if (!value || !parse_number(*value, depth)) {
+                return fail("find: -d expects a non-negative depth");
+            }
+            options.max_depth = static_cast<int>(depth);
+        } else if (arg.rfind("-n", 0) == 0) {
+            const std::optional<std::string> value = take_value(i, arg, "-n");
+            long long limit = 0;
+            if (!value || !parse_number(*value, limit)) {
+                return fail("find: -n expects a non-negative number");
+            }
+            options.max_results = static_cast<std::size_t>(limit);
+        } else if (arg.size() > 1 && arg.front() == '-') {
+            return fail("find: unknown option " + arg);
+        } else {
+            positional.push_back(arg);
+        }
+    }
+
+    if (positional.empty()) {
+        return fail("find: needs a pattern; try 'help find'");
+    }
+    if (positional.size() > 2) {
+        return fail("find: expected a pattern and at most one path");
+    }
+
+    options.pattern = positional.front();
+    if (positional.size() == 2) {
+        target = positional[1];
+    }
+
+    if (const Error invalid = validate_search_options(options); !invalid.ok()) {
+        return fail(invalid);
+    }
+
+    const fs::path root = session_.resolve(target);
+
+    SearchProgressRenderer progress;
+    options.on_progress = std::ref(progress);
+    options.is_cancelled = interrupt_token();
+
+    const Result<SearchReport> result = search(root, options);
+    progress.clear();
+    if (!result.ok()) {
+        return fail(result.error());
+    }
+
+    const SearchReport& report = result.value();
+    for (const FileEntry& entry : report.matches) {
+        if (long_format) {
+            print_long_line(entry, to_utf8(entry.path));
+        } else {
+            std::cout << to_utf8(entry.path) << '\n';
+        }
+    }
+
+    // Warnings and the summary go to standard error so that the matches stay
+    // usable when the output is piped or redirected.
+    std::cout.flush();
+    for (const Error& skipped : report.skipped) {
+        std::cerr << paint("warning: ", kYellow) << skipped.to_string() << '\n';
+    }
+    if (report.unreadable > report.skipped.size()) {
+        std::cerr << paint("warning: ", kYellow)
+                  << report.unreadable - report.skipped.size()
+                  << " more directories could not be read\n";
+    }
+
+    std::cerr << std::format("{}, scanned {} in {}",
+                             plural(report.matches.size(), "match", "matches"),
+                             plural(report.entries, "entry", "entries"),
+                             plural(report.directories, "directory", "directories"));
+    if (report.unreadable > 0) {
+        std::cerr << ", " << report.unreadable << " unreadable";
+    }
+    if (report.truncated) {
+        std::cerr << ", stopped at the -n limit";
+    }
+    if (report.cancelled) {
+        std::cerr << ", cancelled";
+    }
+    std::cerr << '\n';
+
+    return report.cancelled ? 1 : 0;
 }
 
 int Shell::cmd_clear(const Args& args) {

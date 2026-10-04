@@ -4,6 +4,7 @@ add_library(fman_core STATIC
     src/error.cpp
     src/operations.cpp
     src/path_utils.cpp
+    src/search.cpp
     src/session.cpp)
 
 target_include_directories(fman_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")

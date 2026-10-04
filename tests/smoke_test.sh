@@ -44,6 +44,13 @@ contains() {
     fi
     ok
 }
+lines_of() {
+    if [[ -z "$1" ]]; then
+        echo 0
+    else
+        printf '%s\n' "$1" | wc -l
+    fi
+}
 
 # ---------------------------------------------------------------- fixture ----
 mkdir -p "$WORK/alpha"
@@ -169,6 +176,69 @@ contains "$out" "mkdir"
 out="$("$FMAN" help mv)"
 contains "$out" "[-p]"
 
+# ------------------------------------------------------------------- find ----
+mkdir -p "$WORK/search/notes/deep"
+echo "report" >"$WORK/search/report.txt"
+echo "mixed" >"$WORK/search/MiXeD.TXT"
+echo "report 2026" >"$WORK/search/notes/report-2026.txt"
+echo "other" >"$WORK/search/notes/other.md"
+echo "final" >"$WORK/search/notes/deep/final-report.txt"
+echo "hidden" >"$WORK/search/.hidden-report.txt"
+ln -s notes "$WORK/search/dirlink"
+
+out="$("$FMAN" find '*.txt' "$WORK/search" 2>/dev/null)"
+[[ "$(lines_of "$out")" == "3" ]] || fail "glob search returned: $out"
+contains "$out" "report-2026.txt"
+
+# A glob without wildcards means "contains this text".
+out="$("$FMAN" find report "$WORK/search" 2>/dev/null)"
+[[ "$(lines_of "$out")" == "3" ]] || fail "implicit substring search returned: $out"
+
+out="$("$FMAN" find -F '*.txt' "$WORK/search" 2>/dev/null)"
+[[ -z "$out" ]] || fail "-F must treat the pattern literally, got: $out"
+ok
+
+out="$("$FMAN" find -E '^report.*\.txt$' "$WORK/search" 2>/dev/null)"
+[[ "$(lines_of "$out")" == "2" ]] || fail "regex search returned: $out"
+
+out="$("$FMAN" find -i 'mixed.txt' "$WORK/search" 2>/dev/null)"
+contains "$out" "MiXeD.TXT"
+
+out="$("$FMAN" find -a '*.txt' "$WORK/search" 2>/dev/null)"
+[[ "$(lines_of "$out")" == "4" ]] || fail "-a should include the hidden match: $out"
+
+out="$("$FMAN" find '*.txt' -d1 "$WORK/search" 2>/dev/null)"
+[[ "$(lines_of "$out")" == "1" ]] || fail "-d 1 must not descend: $out"
+
+out="$("$FMAN" find '*' -t d "$WORK/search" 2>/dev/null)"
+[[ "$(lines_of "$out")" == "2" ]] || fail "-t d should list the two directories: $out"
+
+# Also proves that symbolic links are not followed.
+out="$("$FMAN" find '*' -t l "$WORK/search" 2>/dev/null)"
+contains "$out" "dirlink"
+
+out="$("$FMAN" find '*.txt' -n1 "$WORK/search" 2>/dev/null)"
+[[ "$(lines_of "$out")" == "1" ]] || fail "-n 1 should stop after one match: $out"
+err="$("$FMAN" find '*.txt' -n1 "$WORK/search" 2>&1 >/dev/null)"
+contains "$err" "stopped at the -n limit"
+
+out="$("$FMAN" find nothing-matches-this "$WORK/search" 2>/dev/null)"
+[[ -z "$out" ]] || fail "a search without matches must be silent on stdout"
+ok
+
+out="$("$FMAN" search '*.md' "$WORK/search" 2>/dev/null)"
+contains "$out" "other.md"
+
+out="$("$FMAN" help find)"
+contains "$out" "-n <count>"
+
+expect_fail "$FMAN" find -E 'a(' "$WORK/search"
+expect_fail "$FMAN" find 'x' "$WORK/no-such-directory"
+expect_fail "$FMAN" find 'x' "$WORK/file2.txt"
+expect_fail "$FMAN" find
+expect_fail "$FMAN" find 'x' -Z
+expect_fail "$FMAN" find 'x' -t q .
+
 # ------------------------------------------------------------- reporting ----
 expect_fail "$FMAN" cd /definitely/not/here
 expect_fail "$FMAN" ls -z .
@@ -206,6 +276,14 @@ if [[ "$(id -u)" != "0" ]]; then
     # A recursive copy must fail instead of quietly copying a partial tree.
     expect_fail "$FMAN" cp -r "$WORK/locked" "$WORK/locked-copy"
     expect_fail "$FMAN" rm -r "$WORK/locked"
+
+    # A search reports the unreadable directory and keeps going...
+    out="$("$FMAN" find '*' "$WORK" 2>&1)"
+    contains "$out" "Permission denied"
+    contains "$out" "1 unreadable"
+
+    # ...but an unreadable root is the answer, not something to skip.
+    expect_fail "$FMAN" find '*' "$WORK/locked"
 
     chmod 755 "$WORK/locked"
     rm -rf "$WORK/locked-copy"
