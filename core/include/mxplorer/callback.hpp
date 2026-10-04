@@ -8,11 +8,11 @@
 
 #include <functional>
 
-namespace dentry {
+namespace mxplorer {
 
 /// Returning true asks the operation to stop at the next safe point. The
 /// terminal front-end wires it to SIGINT; a Qt6 front-end would wire it to a
 /// cancel button.
 using CancelToken = std::function<bool()>;
 
-} // namespace dentry
+} // namespace mxplorer

@@ -1,8 +1,8 @@
-#include "dentry/error.hpp"
+#include "mxplorer/error.hpp"
 
-#include "dentry/path_utils.hpp"
+#include "mxplorer/path_utils.hpp"
 
-namespace dentry {
+namespace mxplorer {
 
 const char* describe(ErrorCode code) {
     switch (code) {
@@ -73,4 +73,4 @@ Error error_from_std(const std::error_code& code, const std::filesystem::path& p
     return Error(mapped, code.message(), path);
 }
 
-} // namespace dentry
+} // namespace mxplorer

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "dentry/callback.hpp"
-#include "dentry/error.hpp"
+#include "mxplorer/callback.hpp"
+#include "mxplorer/error.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -9,7 +9,7 @@
 #include <functional>
 #include <string>
 
-namespace dentry {
+namespace mxplorer {
 
 struct OperationProgress {
     std::string action{};
@@ -50,4 +50,4 @@ Error remove_path(const std::filesystem::path& target,
 /// mkdir, or mkdir -p when parents is true.
 Error create_directory(const std::filesystem::path& target, bool parents = true);
 
-} // namespace dentry
+} // namespace mxplorer

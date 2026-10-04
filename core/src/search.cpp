@@ -1,7 +1,7 @@
-#include "dentry/search.hpp"
+#include "mxplorer/search.hpp"
 
-#include "dentry/directory.hpp"
-#include "dentry/path_utils.hpp"
+#include "mxplorer/directory.hpp"
+#include "mxplorer/path_utils.hpp"
 
 #include <cctype>
 #include <fnmatch.h>
@@ -9,7 +9,7 @@
 #include <string_view>
 #include <utility>
 
-namespace dentry {
+namespace mxplorer {
 namespace {
 
 namespace fs = std::filesystem;
@@ -255,4 +255,4 @@ Result<SearchReport> search(const fs::path& root, const SearchOptions& options) 
     return report;
 }
 
-} // namespace dentry
+} // namespace mxplorer

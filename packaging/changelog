@@ -1,4 +1,4 @@
-dentry (@VERSION@) unstable; urgency=low
+mxplorer (@VERSION@) unstable; urgency=low
 
   * Initial packaging of the terminal front-end.
 

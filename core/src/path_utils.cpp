@@ -1,10 +1,10 @@
-#include "dentry/path_utils.hpp"
+#include "mxplorer/path_utils.hpp"
 
 #include <cstdlib>
 #include <pwd.h>
 #include <unistd.h>
 
-namespace dentry {
+namespace mxplorer {
 
 std::string to_utf8(const std::filesystem::path& path) {
     const std::u8string text = path.u8string();
@@ -62,4 +62,4 @@ bool is_filesystem_root(const std::filesystem::path& path) {
     return normal.has_root_directory() && normal == normal.root_path();
 }
 
-} // namespace dentry
+} // namespace mxplorer

@@ -1,8 +1,8 @@
-#include "dentry/session.hpp"
+#include "mxplorer/session.hpp"
 
-#include "dentry/path_utils.hpp"
+#include "mxplorer/path_utils.hpp"
 
-namespace dentry {
+namespace mxplorer {
 namespace {
 
 /// current_path() throws when the working directory has been deleted, which
@@ -86,4 +86,4 @@ std::string Session::pretty(const std::filesystem::path& path) const {
     return pretty_path(path, home_);
 }
 
-} // namespace dentry
+} // namespace mxplorer

@@ -8,13 +8,13 @@
 int main(int argc, char** argv) {
     std::setlocale(LC_ALL, "");
 
-    dentry::cli::Shell shell;
+    mxplorer::cli::Shell shell;
 
-    // "dentry ls -l /tmp" runs a single command instead of starting a prompt.
+    // "mxplorer ls -l /tmp" runs a single command instead of starting a prompt.
     if (argc > 1) {
         const std::string first = argv[1];
         if (first == "--version" || first == "-V") {
-            std::cout << "dentry " << dentry::cli::version() << '\n';
+            std::cout << "mxplorer " << mxplorer::cli::version() << '\n';
             return 0;
         }
         if (first == "--help" || first == "-h") {

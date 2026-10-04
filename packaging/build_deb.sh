@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# Builds a .deb for the dentry terminal front-end.
+# Builds a .deb for the mxplorer terminal front-end.
 #
 #   ./packaging/build_deb.sh
 #
-# Output: dist/dentry_<version>_<arch>.deb
+# Output: dist/mxplorer_<version>_<arch>.deb
 #
 # debhelper is not installed on this machine, so instead of running
 # dpkg-buildpackage this script stages the install tree itself, writes the
@@ -37,7 +37,7 @@ version="$(sed -n 's/^[[:space:]]*VERSION[[:space:]]\{1,\}\([0-9][^[:space:]]*\)
 
 arch="$(dpkg --print-architecture)"
 work="build/package"
-stage="$work/dentry_${version}_${arch}"
+stage="$work/mxplorer_${version}_${arch}"
 dist="dist"
 
 # Lets dpkg-shlibdeps do its job: it insists on finding debian/control and
@@ -80,8 +80,8 @@ cmake --build "$work/cmake" >/dev/null
 echo "==> install into $stage"
 DESTDIR="$stage" cmake --install "$work/cmake" >/dev/null
 
-binary="$stage/usr/bin/dentry"
-binary_path="$(realpath "$stage/usr/bin/dentry")"
+binary="$stage/usr/bin/mxplorer"
+binary_path="$(realpath "$stage/usr/bin/mxplorer")"
 [[ -x "$binary_path" ]] || die "no binary was installed to $binary"
 
 # The program and the package must not disagree about their version.
@@ -90,8 +90,8 @@ binary_version="$("$binary_path" --version | awk '{print $2}')"
     die "the binary reports $binary_version, the package would be $version"
 
 # Substitute the real version and compress: Debian ships man pages gzipped.
-sed -i "s|@VERSION@|$version|" "$stage/usr/share/man/man1/dentry.1"
-gzip -9 -n "$stage/usr/share/man/man1/dentry.1"
+sed -i "s|@VERSION@|$version|" "$stage/usr/share/man/man1/mxplorer.1"
+gzip -9 -n "$stage/usr/share/man/man1/mxplorer.1"
 
 echo "==> resolve shared library dependencies"
 depends="$(resolve_depends "$binary_path")" || depends=""
@@ -100,7 +100,7 @@ depends="$(resolve_depends "$binary_path")" || depends=""
 installed_size="$(du -sk "$stage/usr" | cut -f1)"
 
 echo "==> write control files"
-mkdir -p "$stage/DEBIAN" "$stage/usr/share/doc/dentry"
+mkdir -p "$stage/DEBIAN" "$stage/usr/share/doc/mxplorer"
 
 sed -e "s|@VERSION@|$version|" \
     -e "s|@ARCH@|$arch|" \
@@ -108,11 +108,11 @@ sed -e "s|@VERSION@|$version|" \
     -e "s|@INSTALLED_SIZE@|$installed_size|" \
     packaging/control.in > "$stage/DEBIAN/control"
 
-install -m 0644 packaging/copyright "$stage/usr/share/doc/dentry/copyright"
+install -m 0644 packaging/copyright "$stage/usr/share/doc/mxplorer/copyright"
 sed -e "s|@VERSION@|$version|" \
     -e "s|@DATE@|$(LC_ALL=C date -R)|" \
     packaging/changelog |
-    gzip -9 -n -c > "$stage/usr/share/doc/dentry/changelog.gz"
+    gzip -9 -n -c > "$stage/usr/share/doc/mxplorer/changelog.gz"
 
 # md5sums for everything outside /usr/share/doc, as policy asks for.
 (cd "$stage" &&
@@ -120,7 +120,7 @@ sed -e "s|@VERSION@|$version|" \
     LC_ALL=C sort -k2) > "$stage/DEBIAN/md5sums"
 
 echo "==> assemble the archive"
-out="$dist/dentry_${version}_${arch}.deb"
+out="$dist/mxplorer_${version}_${arch}.deb"
 rm -f "$out"
 dpkg-deb --root-owner-group --build "$stage" "$out" >/dev/null
 

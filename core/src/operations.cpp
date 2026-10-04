@@ -1,6 +1,6 @@
-#include "dentry/operations.hpp"
+#include "mxplorer/operations.hpp"
 
-#include "dentry/path_utils.hpp"
+#include "mxplorer/path_utils.hpp"
 
 #include <algorithm>
 #include <array>
@@ -8,7 +8,7 @@
 #include <system_error>
 #include <vector>
 
-namespace dentry {
+namespace mxplorer {
 namespace {
 
 namespace fs = std::filesystem;
@@ -563,4 +563,4 @@ Error create_directory(const fs::path& target, bool parents) {
     return Error{};
 }
 
-} // namespace dentry
+} // namespace mxplorer

@@ -1,4 +1,4 @@
-Package: dentry
+Package: mxplorer
 Version: @VERSION@
 Architecture: @ARCH@
 Maintainer: mrg <mrg@localhost>
@@ -7,7 +7,7 @@ Section: utils
 Priority: optional
 Depends: @DEPENDS@
 Description: terminal file manager with a UI independent core
- dentry is a small file manager for Linux. It ships a terminal front-end, an
+ mxplorer is a small file manager for Linux. It ships a terminal front-end, an
  interactive shell plus a one-shot command mode, on top of a C++ core library
  that does the file system work and stays free of any UI toolkit.
  .
@@ -15,4 +15,4 @@ Description: terminal file manager with a UI independent core
  search, progress callbacks and cancellation, so a Qt6 front-end can be added
  later without touching the file system logic.
  .
- This package contains the dentry command and its manual page.
+ This package contains the mxplorer command and its manual page.

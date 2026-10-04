@@ -1,10 +1,10 @@
 #include "shell.hpp"
 
-#include "dentry/directory.hpp"
-#include "dentry/entry.hpp"
-#include "dentry/operations.hpp"
-#include "dentry/path_utils.hpp"
-#include "dentry/search.hpp"
+#include "mxplorer/directory.hpp"
+#include "mxplorer/entry.hpp"
+#include "mxplorer/operations.hpp"
+#include "mxplorer/path_utils.hpp"
+#include "mxplorer/search.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -20,13 +20,13 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-namespace dentry::cli {
+namespace mxplorer::cli {
 namespace {
 
 namespace fs = std::filesystem;
 
-#ifndef DENTRY_VERSION
-#define DENTRY_VERSION "0.0.0"
+#ifndef MXPLORER_VERSION
+#define MXPLORER_VERSION "0.0.0"
 #endif
 
 constexpr std::string_view kReset = "\033[0m";
@@ -377,7 +377,7 @@ void print_tree(const fs::path& directory,
 } // namespace
 
 std::string_view version() {
-    return DENTRY_VERSION;
+    return MXPLORER_VERSION;
 }
 
 Shell::Shell() : session_() {
@@ -506,11 +506,11 @@ int Shell::run_command(const std::vector<std::string>& args) {
 }
 
 void Shell::print_banner() const {
-    std::cout << std::format("dentry {} | type 'help' for commands, 'exit' to quit\n", version());
+    std::cout << std::format("mxplorer {} | type 'help' for commands, 'exit' to quit\n", version());
 }
 
 void Shell::print_prompt() const {
-    std::cout << paint("dentry", kBoldBlue) << ':'
+    std::cout << paint("mxplorer", kBoldBlue) << ':'
               << paint(session_.pretty(session_.cwd()), kBoldGreen) << "$ " << std::flush;
 }
 
@@ -1023,4 +1023,4 @@ int Shell::cmd_exit(const Args& args) {
     return 0;
 }
 
-} // namespace dentry::cli
+} // namespace mxplorer::cli

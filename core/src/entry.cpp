@@ -1,10 +1,10 @@
-#include "dentry/entry.hpp"
+#include "mxplorer/entry.hpp"
 
 #include <chrono>
 #include <ctime>
 #include <format>
 
-namespace dentry {
+namespace mxplorer {
 
 const char* describe(EntryType type) {
     switch (type) {
@@ -88,4 +88,4 @@ std::string format_time(const FileEntry& entry) {
     return format_time(entry.modified);
 }
 
-} // namespace dentry
+} // namespace mxplorer

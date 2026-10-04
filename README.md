@@ -1,11 +1,11 @@
-# dentry
+# Mxplorer
 
 一个跑在 Linux 上的简易文件资源管理器。当前界面是终端里交互式 shell，
-所有文件系统逻辑集中在一个不依赖任何 UI 的静态库 `dentry_core` 里，
+所有文件系统逻辑集中在一个不依赖任何 UI 的静态库 `mxplorer_core` 里，
 将来的 Qt6 前端只是再加一个可执行文件，不碰 core。
 
-名字取自 Linux 内核里的 dentry（directory entry，目录项）——内核用它表示路径中的
-一个分量，而这个程序干的正是同一件事。
+名字来自作者姓名缩写 M.R.G. 的首字母与 Explorer 的结合。品牌写作 Mxplorer，而命令
+名、包名、命名空间与头文件目录一律小写 `mxplorer`（类似 Git 与 `git`）。
 
 项目还在开发中，没有发布，也不做版本迭代；`build/`、`dist/` 这类产物随时可以删掉
 重新生成。
@@ -20,18 +20,18 @@
 cmake -S . -B build -G Ninja
 cmake --build build
 
-./build/cli/dentry                              # 交互式 shell
-./build/cli/dentry ls -l /tmp                   # 也可以只跑一条命令
+./build/cli/mxplorer                              # 交互式 shell
+./build/cli/mxplorer ls -l /tmp                   # 也可以只跑一条命令
 ctest --test-dir build --output-on-failure    # 冒烟测试
 ```
 
 ## 目录结构
 
 ```
-dentry/
+mxplorer/
 ├── CMakeLists.txt
-├── core/                     # dentry_core：没有 Qt、没有打印、没有 exit()、不抛异常
-│   ├── include/dentry/
+├── core/                     # mxplorer_core：没有 Qt、没有打印、没有 exit()、不抛异常
+│   ├── include/mxplorer/
 │   │   ├── callback.hpp      # CancelToken：界面无关的"请求停止"回调
 │   │   ├── error.hpp         # ErrorCode / Error / Result<T>
 │   │   ├── entry.hpp         # FileEntry：一个条目的全部数据
@@ -53,18 +53,18 @@ dentry/
 交互模式（提示符显示当前目录，`cd` 状态会保持）：
 
 ```
-$ ./build/cli/dentry
-dentry 0.1.0 | type 'help' for commands, 'exit' to quit
-dentry:~$ cd Documents/Project
-dentry:~/Documents/Project$ ls
+$ ./build/cli/mxplorer
+mxplorer 0.1.0 | type 'help' for commands, 'exit' to quit
+mxplorer:~$ cd Documents/Project
+mxplorer:~/Documents/Project$ ls
 ...
 ```
 
 非交互模式一次只执行一条命令，进程结束状态就是命令的结果（可直接用在脚本里）：
 
 ```sh
-./build/cli/dentry tree . -L 2
-./build/cli/dentry cp -r src backup/ && echo done
+./build/cli/mxplorer tree . -L 2
+./build/cli/mxplorer cp -r src backup/ && echo done
 ```
 
 | 命令 | 说明 |
@@ -88,11 +88,11 @@ dentry:~/Documents/Project$ ls
 
 ```sh
 ./packaging/build_deb.sh
-# ==> dist/dentry_0.1.0_amd64.deb
+# ==> dist/mxplorer_0.1.0_amd64.deb
 
-sudo apt install ./dist/dentry_0.1.0_amd64.deb
-dentry --version
-man dentry
+sudo apt install ./dist/mxplorer_0.1.0_amd64.deb
+mxplorer --version
+man mxplorer
 ```
 
 这台机器上没有装 debhelper，所以脚本不走 `dpkg-buildpackage`：它自己把安装树
@@ -103,9 +103,9 @@ md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
 包内容：
 
 ```
-/usr/bin/dentry
-/usr/share/man/man1/dentry.1.gz
-/usr/share/doc/dentry/{copyright,changelog.gz}
+/usr/bin/mxplorer
+/usr/share/man/man1/mxplorer.1.gz
+/usr/share/doc/mxplorer/{copyright,changelog.gz}
 ```
 
 两点要注意：
@@ -171,8 +171,8 @@ md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
 Qt6 还没安装（`pkg-config --modversion Qt6Core` 目前找不到）。装好之后大致是：
 
 1. 新建 `gui/`，`find_package(Qt6 COMPONENTS Widgets REQUIRED)`，
-   `add_executable(dentry_gui ...)` 并链接 `dentry_core`，同时在顶层打开
-   `-DDENTRY_BUILD_GUI=ON`（当前这个选项会明确报错提示尚未实现）。
+   `add_executable(mxplorer_gui ...)` 并链接 `mxplorer_core`，同时在顶层打开
+   `-DMXPLORER_BUILD_GUI=ON`（当前这个选项会明确报错提示尚未实现）。
 2. 写 `EntryModel : QAbstractItemModel`，内部缓存 `std::vector<FileEntry>`，
    `refresh()` 调用 `list_directory()`；这一层几乎只是搬运字段。
 3. 操作放 `QThreadPool` / `QtConcurrent::run`，把 `OperationOptions::on_progress`

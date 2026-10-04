@@ -3,12 +3,12 @@
 // Navigation state: "where am I" plus "turn user input into an absolute path".
 // It has no idea whether that input came from a prompt or from a Qt6 dialog.
 
-#include "dentry/error.hpp"
+#include "mxplorer/error.hpp"
 
 #include <filesystem>
 #include <string>
 
-namespace dentry {
+namespace mxplorer {
 
 class Session {
 public:
@@ -39,4 +39,4 @@ private:
     std::filesystem::path home_{};
 };
 
-} // namespace dentry
+} // namespace mxplorer
