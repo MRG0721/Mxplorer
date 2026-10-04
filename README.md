@@ -34,6 +34,8 @@ fman/
 │   └── src/
 ├── cli/                      # 终端前端：解析命令行、打印结果、渲染进度
 │   └── src/{main,shell}.cpp
+├── packaging/                # deb 打包：man page、control 模板、打包脚本
+│   └── build_deb.sh
 └── tests/smoke_test.sh       # 端到端检查，由 ctest 调用
 ```
 
@@ -71,6 +73,42 @@ fman:~/Documents/Project$ ls
 
 路径支持 `~`、`~`/相对路径、`-`，以及 `'单引号'`、`"双引号"`、反斜杠转义
 （`cd "my dir"` 可以正常工作）。
+
+## 打包成 deb
+
+```sh
+./packaging/build_deb.sh
+# ==> dist/fman_0.1.0_amd64.deb
+
+sudo apt install ./dist/fman_0.1.0_amd64.deb
+fman --version
+man fman
+```
+
+这台机器上没有装 debhelper，所以脚本不走 `dpkg-buildpackage`：它自己把安装树
+铺到 `build/package/` 里（`cmake --install` + `DESTDIR`），写好 control、
+md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
+`Depends` 仍然由 `dpkg-shlibdeps` 算出来，所以依赖串和 debhelper 的结果一致。
+
+包内容：
+
+```
+/usr/bin/fman
+/usr/share/man/man1/fman.1.gz
+/usr/share/doc/fman/{copyright,changelog.gz}
+```
+
+两点要注意：
+
+- `Maintainer` 和 man page 的作者目前是占位的 `mrg <mrg@localhost>`，要对外发布
+  得换成真实身份。
+- 依赖是**在本机算出来**的（`libc6 (>= 2.38)`、`libstdc++6 (>= 16)`，因为这里是
+  forky + GCC 16）。也就是说这个包只能装在不低于本机版本的系统上，Debian 12 或
+  Ubuntu 22.04 会因为 libstdc++ 太旧而装不上。要支持更老的目标系统，得用
+  debootstrap/容器在目标发行版里构建。
+
+之后想补的：`debian/` 正式源码包布局 + debhelper（这样 `dpkg-buildpackage`、
+`sbuild`、PPA 那套都能直接用），以及把 core 静态库和头文件拆一个 `-dev` 包。
 
 ## 架构约定
 

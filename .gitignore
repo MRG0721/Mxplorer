@@ -13,6 +13,9 @@ CMakeUserPresets.json
 # binaries
 /cli/fman
 
+# package output
+/dist/
+
 # tooling and objects
 .cache/
 .vscode/

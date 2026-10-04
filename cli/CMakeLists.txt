@@ -4,6 +4,10 @@ add_executable(fman_cli
 
 target_link_libraries(fman_cli PRIVATE fman_core)
 
+target_compile_definitions(fman_cli PRIVATE FMAN_VERSION="${PROJECT_VERSION}")
+
+install(TARGETS fman_cli RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(fman_cli PRIVATE -Wall -Wextra -Wpedantic)
     if(FMAN_WARNINGS_AS_ERRORS)

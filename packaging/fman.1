@@ -1,0 +1,127 @@
+.TH FMAN 1 "2026-09-29" "fman @VERSION@" "User Commands"
+.SH NAME
+fman \- terminal file manager built on a UI independent core
+.SH SYNOPSIS
+.B fman
+.RI [ command " [" argument " ...]]"
+.SH DESCRIPTION
+.B fman
+is a small file manager for Linux.
+Started without arguments it prints a prompt and executes commands until you
+leave it, so the current directory is kept between commands.
+Started with a command it executes that one command, prints the result and
+exits with the status of that command, which makes it usable from scripts.
+.PP
+Paths may be absolute, relative, or start with
+.BR ~ " for the home directory."
+The special path
+.B -
+refers to the previous directory.
+Arguments may be quoted with single or double quotes and backslash escapes
+are honoured outside single quotes.
+.SH COMMANDS
+.TP
+.BI ls " [\-a] [\-l] [path]"
+List the entries of a directory.
+Directories are marked with a trailing
+.BR / ,
+symbolic links with a trailing
+.BR @ .
+.TP
+.B ll
+Shorthand for
+.BR "ls \-l" .
+.TP
+.BI cd " [path]"
+Change the current directory.
+Without an argument it goes to the home directory.
+.TP
+.B pwd
+Print the current directory.
+.TP
+.BI cp " [\-r] [\-f] [\-p] " source " ... " destination
+Copy files and directories.
+When several sources or an existing directory as destination are given the
+sources are copied into the destination, like
+.BR cp (1).
+Symbolic links are recreated rather than followed.
+.TP
+.BI mv " [\-f] " source " ... " destination
+Move or rename files and directories.
+Within one file system this uses
+.BR rename (2);
+across file systems it falls back to copy and delete.
+.TP
+.BI rm " [\-r] [\-f] " path " ..."
+Remove files, or whole trees with
+.BR \-r .
+.TP
+.BI mkdir " [\-p] " path " ..."
+Create directories.
+With
+.B \-p
+missing parents are created and existing directories are not an error.
+.TP
+.BI stat " path " ..."
+Show type, size, modification time and permission bits.
+.TP
+.BI tree " [path] [\-L " depth "]"
+Draw the directory hierarchy, limited to
+.I depth
+levels if given.
+.TP
+.B help
+List the available commands.
+.TP
+.B clear
+Clear the screen.
+.TP
+.B exit
+Leave the shell.
+.SH OPTIONS
+.TP
+.B \-a
+Include hidden entries (names starting with a dot).
+.TP
+.B \-l
+Long listing: permissions, size, modification time.
+.TP
+.B \-r
+Recurse into directories.
+.TP
+.B \-f
+Overwrite existing destinations, and ignore paths that do not exist when
+removing.
+.TP
+.B \-p
+Copy permission bits.
+.TP
+.BR \-h ", " \-\-help
+Show the command list.
+.TP
+.BR \-V ", " \-\-version
+Show the version.
+.SH EXAMPLES
+.TP
+List the current directory, hidden entries included:
+.B fman ls -a
+.TP
+Copy a tree and keep permission bits:
+.B fman cp -rp src backup/
+.TP
+Show two levels of the hierarchy below the home directory:
+.B fman tree ~ -L 2
+.SH "EXIT STATUS"
+.B 0
+on success,
+.B 1
+on failure, which includes a cancelled operation.
+.SH "SEE ALSO"
+.BR ls (1),
+.BR cp (1),
+.BR mv (1),
+.BR rm (1),
+.BR mkdir (1),
+.BR tree (1)
+.SH AUTHOR
+mrg <mrg@localhost>

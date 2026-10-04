@@ -22,7 +22,9 @@ namespace {
 
 namespace fs = std::filesystem;
 
-constexpr std::string_view kVersion = "0.1.0";
+#ifndef FMAN_VERSION
+#define FMAN_VERSION "0.0.0"
+#endif
 
 constexpr std::string_view kReset = "\033[0m";
 constexpr std::string_view kBoldBlue = "\033[1;34m";
@@ -307,6 +309,10 @@ void print_tree(const fs::path& directory,
 
 } // namespace
 
+std::string_view version() {
+    return FMAN_VERSION;
+}
+
 Shell::Shell() : session_() {
     register_commands();
 }
@@ -409,7 +415,7 @@ int Shell::run_command(const std::vector<std::string>& args) {
 }
 
 void Shell::print_banner() const {
-    std::cout << std::format("fman {} | type 'help' for commands, 'exit' to quit\n", kVersion);
+    std::cout << std::format("fman {} | type 'help' for commands, 'exit' to quit\n", version());
 }
 
 void Shell::print_prompt() const {

@@ -15,6 +15,9 @@
 
 namespace fman::cli {
 
+/// Version string, taken from the project version at build time.
+std::string_view version();
+
 struct OperationFlags {
     bool force = false;
     bool recursive = false;

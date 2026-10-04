@@ -1,0 +1,12 @@
+Source: fman
+Section: utils
+Priority: optional
+Maintainer: @MAINTAINER@
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+
+Package: fman
+Architecture: any
+Depends: ${shlibs:Depends}
+Description: placeholder only used to resolve shared library dependencies
+ fman.

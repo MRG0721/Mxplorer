@@ -1,0 +1,5 @@
+fman (@VERSION@) unstable; urgency=low
+
+  * Initial packaging of the terminal front-end.
+
+ -- mrg <mrg@localhost>  @DATE@

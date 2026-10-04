@@ -9,6 +9,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Needed in the top level scope: the man page below installs into
+# CMAKE_INSTALL_MANDIR, and include() inside a subdirectory would not be
+# visible here.
+include(GNUInstallDirs)
+
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
 endif()
@@ -27,6 +32,8 @@ add_subdirectory(core)
 
 if(FMAN_BUILD_CLI)
     add_subdirectory(cli)
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/fman.1"
+            DESTINATION "${CMAKE_INSTALL_MANDIR}/man1")
 endif()
 
 include(CTest)
