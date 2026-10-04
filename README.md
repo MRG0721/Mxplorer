@@ -55,8 +55,8 @@ mxplorer/
 ```
 $ ./build/cli/mxplorer
 mxplorer 0.0.1 | type 'help' for commands, 'exit' to quit
-mxplorer:~$ cd Documents/Project
-mxplorer:~/Documents/Project$ ls
+mxplorer:~$ cd mxplorer
+mxplorer:~/mxplorer$ ls
 ...
 ```
 
