@@ -54,7 +54,7 @@ mxplorer/
 
 ```
 $ ./build/cli/mxplorer
-mxplorer 0.1.0 | type 'help' for commands, 'exit' to quit
+mxplorer 0.0.1 | type 'help' for commands, 'exit' to quit
 mxplorer:~$ cd Documents/Project
 mxplorer:~/Documents/Project$ ls
 ...
@@ -88,9 +88,9 @@ mxplorer:~/Documents/Project$ ls
 
 ```sh
 ./packaging/build_deb.sh
-# ==> dist/mxplorer_0.1.0_amd64.deb
+# ==> dist/Mxplorer-0.0.1-unstable-amd64.deb
 
-sudo apt install ./dist/mxplorer_0.1.0_amd64.deb
+sudo apt install ./dist/Mxplorer-0.0.1-unstable-amd64.deb
 mxplorer --version
 man mxplorer
 ```

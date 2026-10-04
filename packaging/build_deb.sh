@@ -4,7 +4,7 @@
 #
 #   ./packaging/build_deb.sh
 #
-# Output: dist/mxplorer_<version>_<arch>.deb
+# Output: dist/Mxplorer-<version>-<distribution>-<arch>.deb
 #
 # debhelper is not installed on this machine, so instead of running
 # dpkg-buildpackage this script stages the install tree itself, writes the
@@ -22,6 +22,11 @@ cd "$project_root"
 
 maintainer="mrg <mrg@localhost>"
 
+# The artifact carries the brand spelling; the package itself stays lowercase.
+# The distribution comes from the changelog template, so it lives in one place:
+# "unstable" while the project is under development.
+brand="Mxplorer"
+
 die() {
     echo "error: $*" >&2
     exit 1
@@ -36,6 +41,8 @@ version="$(sed -n 's/^[[:space:]]*VERSION[[:space:]]\{1,\}\([0-9][^[:space:]]*\)
 [[ -n "$version" ]] || die "cannot read the project version from CMakeLists.txt"
 
 arch="$(dpkg --print-architecture)"
+distribution="$(sed -n '1s/.*) *\([^;]*\);.*/\1/p' packaging/changelog)"
+[[ -n "$distribution" ]] || distribution="unstable"
 work="build/package"
 stage="$work/mxplorer_${version}_${arch}"
 dist="dist"
@@ -120,7 +127,7 @@ sed -e "s|@VERSION@|$version|" \
     LC_ALL=C sort -k2) > "$stage/DEBIAN/md5sums"
 
 echo "==> assemble the archive"
-out="$dist/mxplorer_${version}_${arch}.deb"
+out="$dist/${brand}-${version}-${distribution}-${arch}.deb"
 rm -f "$out"
 dpkg-deb --root-owner-group --build "$stage" "$out" >/dev/null
 

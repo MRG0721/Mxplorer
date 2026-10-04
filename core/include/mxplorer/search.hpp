@@ -52,9 +52,10 @@ struct SearchOptions {
     EntryFilter filter = EntryFilter::any;
     bool include_hidden = false;
 
-    /// Deepest entry depth that is considered. Entries directly inside the root
-    /// are at depth 1, so max_depth == 1 means "do not descend at all".
-    /// A negative value means no limit.
+    /// Deepest entry depth that is considered, for both matching and
+    /// descending. Entries directly inside the root are at depth 1, so
+    /// max_depth == 1 means "look at the root's own entries only" and
+    /// max_depth == 0 matches nothing. A negative value means no limit.
     int max_depth = -1;
 
     /// Stop after this many matches. 0 means no limit.

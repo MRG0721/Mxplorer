@@ -193,6 +193,7 @@ contains "$out" "report-2026.txt"
 # A glob without wildcards means "contains this text".
 out="$("$MXPLORER" find report "$WORK/search" 2>/dev/null)"
 [[ "$(lines_of "$out")" == "3" ]] || fail "implicit substring search returned: $out"
+ok
 
 out="$("$MXPLORER" find -F '*.txt' "$WORK/search" 2>/dev/null)"
 [[ -z "$out" ]] || fail "-F must treat the pattern literally, got: $out"
@@ -200,18 +201,30 @@ ok
 
 out="$("$MXPLORER" find -E '^report.*\.txt$' "$WORK/search" 2>/dev/null)"
 [[ "$(lines_of "$out")" == "2" ]] || fail "regex search returned: $out"
+ok
 
 out="$("$MXPLORER" find -i 'mixed.txt' "$WORK/search" 2>/dev/null)"
 contains "$out" "MiXeD.TXT"
 
 out="$("$MXPLORER" find -a '*.txt' "$WORK/search" 2>/dev/null)"
 [[ "$(lines_of "$out")" == "4" ]] || fail "-a should include the hidden match: $out"
+ok
+
+out="$("$MXPLORER" find '*.txt' -d0 "$WORK/search" 2>/dev/null)"
+[[ -z "$out" ]] || fail "-d 0 must match nothing, got: $out"
+ok
 
 out="$("$MXPLORER" find '*.txt' -d1 "$WORK/search" 2>/dev/null)"
 [[ "$(lines_of "$out")" == "1" ]] || fail "-d 1 must not descend: $out"
+ok
+
+out="$("$MXPLORER" find '*.txt' -d2 "$WORK/search" 2>/dev/null)"
+[[ "$(lines_of "$out")" == "2" ]] || fail "-d 2 should reach one level deeper: $out"
+ok
 
 out="$("$MXPLORER" find '*' -t d "$WORK/search" 2>/dev/null)"
 [[ "$(lines_of "$out")" == "2" ]] || fail "-t d should list the two directories: $out"
+ok
 
 # Also proves that symbolic links are not followed.
 out="$("$MXPLORER" find '*' -t l "$WORK/search" 2>/dev/null)"
@@ -219,6 +232,7 @@ contains "$out" "dirlink"
 
 out="$("$MXPLORER" find '*.txt' -n1 "$WORK/search" 2>/dev/null)"
 [[ "$(lines_of "$out")" == "1" ]] || fail "-n 1 should stop after one match: $out"
+ok
 err="$("$MXPLORER" find '*.txt' -n1 "$WORK/search" 2>&1 >/dev/null)"
 contains "$err" "stopped at the -n limit"
 

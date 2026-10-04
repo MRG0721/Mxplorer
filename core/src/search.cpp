@@ -216,13 +216,16 @@ Result<SearchReport> search(const fs::path& root, const SearchOptions& options) 
         progress.current_directory = directory;
 
         const int entry_depth = depth + 1;
+        // Entries directly inside the root are at depth 1, so a max_depth of 0
+        // means nothing is in range. The same limit governs descending.
+        const bool in_range = options.max_depth < 0 || entry_depth <= options.max_depth;
         std::vector<fs::path> subdirectories;
 
         for (const FileEntry& entry : listing.value()) {
             ++report.entries;
             ++progress.entries;
 
-            if (passes_filter(entry, options.filter) && matcher.matches(entry.name) &&
+            if (in_range && passes_filter(entry, options.filter) && matcher.matches(entry.name) &&
                 (!options.extra_filter || options.extra_filter(entry))) {
                 report.matches.push_back(entry);
                 ++progress.matches;

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(Mxplorer
-    VERSION 0.1.0
+    VERSION 0.0.1
     DESCRIPTION "A small file manager with a terminal front-end (Qt6 front-end planned)"
     LANGUAGES CXX)
 
