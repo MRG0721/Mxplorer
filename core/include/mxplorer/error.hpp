@@ -15,9 +15,11 @@
 #include <system_error>
 #include <utility>
 
-namespace mxplorer {
+namespace mxplorer
+{
 
-enum class ErrorCode {
+enum class ErrorCode
+{
     ok = 0,
     not_found,
     not_a_directory,
@@ -33,17 +35,26 @@ enum class ErrorCode {
 
 const char* describe(ErrorCode code);
 
-struct Error {
+struct Error
+{
     ErrorCode code = ErrorCode::ok;
     std::string message;
     std::filesystem::path path{};
 
     Error() = default;
     Error(ErrorCode code_value, std::string text, std::filesystem::path where = {})
-        : code(code_value), message(std::move(text)), path(std::move(where)) {}
+        : code(code_value), message(std::move(text)), path(std::move(where))
+    {
+    }
 
-    bool ok() const { return code == ErrorCode::ok; }
-    explicit operator bool() const { return ok(); }
+    bool ok() const
+    {
+        return code == ErrorCode::ok;
+    }
+    explicit operator bool() const
+    {
+        return ok();
+    }
 
     /// Human readable one-liner: "<message> (<path>)".
     std::string to_string() const;
@@ -54,18 +65,38 @@ Error error_from_std(const std::error_code& code, const std::filesystem::path& p
 
 /// A value or an Error. Deliberately tiny: no exceptions cross a layer boundary.
 template <typename T>
-class Result {
+class Result
+{
 public:
-    Result(T value) : value_(std::move(value)) {}
-    Result(Error error) : error_(std::move(error)) {}
+    Result(T value) : value_(std::move(value))
+    {
+    }
+    Result(Error error) : error_(std::move(error))
+    {
+    }
 
-    bool ok() const { return value_.has_value(); }
-    explicit operator bool() const { return ok(); }
+    bool ok() const
+    {
+        return value_.has_value();
+    }
+    explicit operator bool() const
+    {
+        return ok();
+    }
 
-    T& value() { return *value_; }
-    const T& value() const { return *value_; }
+    T& value()
+    {
+        return *value_;
+    }
+    const T& value() const
+    {
+        return *value_;
+    }
 
-    const Error& error() const { return error_; }
+    const Error& error() const
+    {
+        return error_;
+    }
 
 private:
     std::optional<T> value_{};

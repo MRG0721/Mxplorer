@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 MRG0721
+#
+# Allman brace style: every opening brace goes on its own line.
+# Format the whole tree with:
+#     clang-format -i $(git ls-files '*.hpp' '*.cpp')
+#
+BasedOnStyle: LLVM
+Language: Cpp
+Standard: c++20
+
+# Four spaces, 100 columns, matching the rest of the project.
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+AccessModifierOffset: -4
+IndentCaseLabels: true
+
+# The point of this file.
+BreakBeforeBraces: Allman
+
+# Keep short statements one per line so the style stays predictable.
+AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortEnumsOnASingleLine: false
+
+# Comments and includes are hand written; do not reflow or reorder them.
+ReflowComments: false
+SortIncludes: Never
+
+# Pointer and reference stick to the type, as in the existing code.
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+BreakConstructorInitializers: BeforeColon
+ConstructorInitializerIndentWidth: 4
+AlwaysBreakTemplateDeclarations: Yes
+FixNamespaceComments: true

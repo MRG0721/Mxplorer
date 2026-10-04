@@ -12,9 +12,11 @@
 #include <filesystem>
 #include <string>
 
-namespace mxplorer {
+namespace mxplorer
+{
 
-enum class EntryType {
+enum class EntryType
+{
     file,
     directory,
     symlink,
@@ -26,7 +28,8 @@ const char* describe(EntryType type);
 /// The character used in the first column of an "ls -l" style listing.
 char type_char(EntryType type);
 
-struct FileEntry {
+struct FileEntry
+{
     std::filesystem::path path{};
     std::string name{};
     EntryType type = EntryType::other;
@@ -37,8 +40,14 @@ struct FileEntry {
     std::filesystem::perms permissions = std::filesystem::perms::unknown;
     bool is_hidden = false;
 
-    bool is_directory() const { return type == EntryType::directory; }
-    bool is_symlink() const { return type == EntryType::symlink; }
+    bool is_directory() const
+    {
+        return type == EntryType::directory;
+    }
+    bool is_symlink() const
+    {
+        return type == EntryType::symlink;
+    }
 };
 
 /// "rwxr-xr-x" (nine characters, without the leading type character).

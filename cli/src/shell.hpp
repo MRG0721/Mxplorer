@@ -16,12 +16,14 @@
 #include <string_view>
 #include <vector>
 
-namespace mxplorer::cli {
+namespace mxplorer::cli
+{
 
 /// Version string, taken from the project version at build time.
 std::string_view version();
 
-class Shell {
+class Shell
+{
 public:
     Shell();
 
@@ -35,11 +37,12 @@ private:
     using Args = std::vector<std::string>;
     using Handler = std::function<int(const Args&)>;
 
-    struct Command {
+    struct Command
+    {
         std::string usage;
         std::string description;
         Handler handler;
-        Args prefix{}; ///< extra arguments injected first, used by aliases
+        Args prefix{};         ///< extra arguments injected first, used by aliases
         std::string details{}; ///< extra lines printed by "help <command>"
     };
 

@@ -11,18 +11,32 @@
 #include <filesystem>
 #include <string>
 
-namespace mxplorer {
+namespace mxplorer
+{
 
-class Session {
+class Session
+{
 public:
     /// Starts in the current working directory.
     Session();
     explicit Session(const std::filesystem::path& start);
 
-    const std::filesystem::path& cwd() const { return cwd_; }
-    const std::filesystem::path& home() const { return home_; }
-    const std::filesystem::path& previous() const { return previous_; }
-    bool has_previous() const { return !previous_.empty(); }
+    const std::filesystem::path& cwd() const
+    {
+        return cwd_;
+    }
+    const std::filesystem::path& home() const
+    {
+        return home_;
+    }
+    const std::filesystem::path& previous() const
+    {
+        return previous_;
+    }
+    bool has_previous() const
+    {
+        return !previous_.empty();
+    }
 
     /// Handles "~", "-", relative paths, "." and "..".
     /// The result is absolute and lexically normal but not canonicalized, so a

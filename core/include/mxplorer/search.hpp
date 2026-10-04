@@ -17,22 +17,26 @@
 #include <string>
 #include <vector>
 
-namespace mxplorer {
+namespace mxplorer
+{
 
-enum class MatchMode {
+enum class MatchMode
+{
     glob,      ///< '*', '?' and '[...]' wildcards, matched against the name
     substring, ///< the pattern is plain text and may appear anywhere in the name
     regex,     ///< an ECMAScript regular expression, searched anywhere in the name
 };
 
-enum class EntryFilter {
+enum class EntryFilter
+{
     any,
     file,
     directory,
     symlink,
 };
 
-struct SearchProgress {
+struct SearchProgress
+{
     std::filesystem::path current_directory{};
     std::size_t directories = 0;
     std::size_t entries = 0;
@@ -43,7 +47,8 @@ struct SearchProgress {
 /// signal and update its progress bar.
 using SearchProgressCallback = std::function<void(const SearchProgress&)>;
 
-struct SearchOptions {
+struct SearchOptions
+{
     std::string pattern{};
     MatchMode mode = MatchMode::glob;
 
@@ -72,7 +77,8 @@ struct SearchOptions {
     CancelToken is_cancelled{};
 };
 
-struct SearchReport {
+struct SearchReport
+{
     std::vector<FileEntry> matches{};
     std::size_t directories = 0;  ///< directories whose contents were read
     std::size_t entries = 0;      ///< entries that were examined
@@ -94,8 +100,7 @@ struct SearchReport {
 ///
 /// Cancelling is not an error either: the partial report comes back with
 /// cancelled set, so the caller can still show what was found.
-Result<SearchReport> search(const std::filesystem::path& root,
-                            const SearchOptions& options = {});
+Result<SearchReport> search(const std::filesystem::path& root, const SearchOptions& options = {});
 
 /// Compiles the pattern without walking anything, so a front-end can reject a
 /// bad pattern before starting a long search.

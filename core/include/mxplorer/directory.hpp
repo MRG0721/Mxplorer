@@ -10,21 +10,25 @@
 #include <string_view>
 #include <vector>
 
-namespace mxplorer {
+namespace mxplorer
+{
 
-enum class SortKey {
+enum class SortKey
+{
     name,
     size,
     modified,
     type,
 };
 
-enum class SortOrder {
+enum class SortOrder
+{
     ascending,
     descending,
 };
 
-struct ListOptions {
+struct ListOptions
+{
     bool include_hidden = false;
     bool follow_symlinks = false;
     SortKey sort_key = SortKey::name;

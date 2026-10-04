@@ -7,7 +7,8 @@
 #include <string>
 #include <string_view>
 
-namespace mxplorer {
+namespace mxplorer
+{
 
 /// std::filesystem::path -> UTF-8 bytes. Both a terminal and Qt want UTF-8.
 std::string to_utf8(const std::filesystem::path& path);
@@ -22,8 +23,7 @@ std::filesystem::path expand_tilde(const std::filesystem::path& path,
                                    const std::filesystem::path& home);
 
 /// Shortens a leading home directory to "~" for display purposes.
-std::string pretty_path(const std::filesystem::path& path,
-                        const std::filesystem::path& home);
+std::string pretty_path(const std::filesystem::path& path, const std::filesystem::path& home);
 
 /// True for "/" and for paths that normalize to it, such as "/." or "/tmp/..".
 bool is_filesystem_root(const std::filesystem::path& path);

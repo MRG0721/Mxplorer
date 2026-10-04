@@ -8,19 +8,23 @@
 #include <string>
 #include <vector>
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv)
+{
     std::setlocale(LC_ALL, "");
 
     mxplorer::cli::Shell shell;
 
     // "mxplorer ls -l /tmp" runs a single command instead of starting a prompt.
-    if (argc > 1) {
+    if (argc > 1)
+    {
         const std::string first = argv[1];
-        if (first == "--version" || first == "-V") {
+        if (first == "--version" || first == "-V")
+        {
             std::cout << "mxplorer " << mxplorer::cli::version() << '\n';
             return 0;
         }
-        if (first == "--help" || first == "-h") {
+        if (first == "--help" || first == "-h")
+        {
             return shell.run_command({"help"});
         }
 

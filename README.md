@@ -30,6 +30,7 @@ ctest --test-dir build --output-on-failure    # 冒烟测试
 ```
 mxplorer/
 ├── CMakeLists.txt
+├── .clang-format             # Allman 花括号风格，4 空格 / 100 列
 ├── LICENSE                   # GPL-3.0-or-later，未改动的 GPLv3 全文
 ├── core/                     # mxplorer_core：没有 Qt、没有打印、没有 exit()、不抛异常
 │   ├── include/mxplorer/
@@ -167,6 +168,21 @@ md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
   内存里（`SearchReport::matches`），所以超大树 + 无上限的长搜索会吃内存。要按
   内容搜或流式输出，得另加一层（`SearchOptions::extra_filter` 就是为内容匹配留
   的接口）。
+
+## 代码风格
+
+统一使用 **Allman** 花括号风格：任何左花括号都独占一行（命名空间、类定义、函数、
+`if` / `else` / `for` / `while` / `switch`、lambda、构造函数初始化列表之后都是如此）。
+风格由仓库根目录的 `.clang-format` 固化：4 空格缩进、100 列、注释与 include 不重排、
+短函数不压成单行（`switch` 里的 `case X: return Y;` 允许保持一行）。
+
+重新格式化整个代码树：
+
+```sh
+clang-format -i $(git ls-files '*.hpp' '*.cpp')
+```
+
+这条命令是幂等的：已经符合风格的代码再跑一次不会产生改动。
 
 ## 接 Qt6 的路线
 
