@@ -25,10 +25,12 @@ fman/
 ├── CMakeLists.txt
 ├── core/                     # fman_core：纯标准库，没有 Qt、没有打印、没有 exit()
 │   ├── include/fman/
+│   │   ├── callback.hpp      # CancelToken：界面无关的"请求停止"回调
 │   │   ├── error.hpp         # ErrorCode / Error / Result<T>
 │   │   ├── entry.hpp         # FileEntry：一个条目的全部数据
 │   │   ├── directory.hpp     # list_directory / stat_path，排序与自然序比较
 │   │   ├── operations.hpp    # copy / move / remove / mkdir + 进度回调 + 取消令牌
+│   │   ├── search.hpp        # 按名字检索：glob/子串/正则 + 过滤 + 进度 + 取消
 │   │   ├── path_utils.hpp    # UTF-8 转换、~ 展开、~/ 显示
 │   │   └── session.hpp       # 当前目录状态、把用户输入解析成绝对路径
 │   └── src/
@@ -69,6 +71,7 @@ fman:~/Documents/Project$ ls
 | `mkdir [-p] path...` | 建目录，`-p` 建父目录且对已存在目录静默 |
 | `stat path...` | 显示类型、大小、mtime、权限位 |
 | `tree [path] [-L depth]` | 打印目录树 |
+| `find <pattern> [path] [选项]` / `search` | 按名字检索，结果逐行打印绝对路径；`-i` 忽略大小写、`-E` 正则、`-F` 字面、`-l` 长格式、`-a` 含隐藏、`-t f\|d\|l` 类型、`-d N` 深度、`-n N` 上限 |
 | `help` / `clear` / `exit` | — |
 
 路径支持 `~`、`~`/相对路径、`-`，以及 `'单引号'`、`"双引号"`、反斜杠转义
@@ -136,7 +139,8 @@ md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
 ## 已实现 / 尚未实现
 
 已实现：列目录（含自然序、目录优先）、详细信息、复制、移动、删除、建目录、
-目录树、进度显示、取消、错误分类、端到端冒烟测试。
+目录树、按名字检索（glob / 子串 / 正则，带类型与深度过滤）、进度显示、取消、
+错误分类、端到端冒烟测试。
 
 刻意留的坑（想继续做的话）：
 
@@ -148,6 +152,10 @@ md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
   `cp -r` / `rm -r` 直接失败，不会产出不完整的副本。
 - 不支持 `~user`。
 - `cp` 的默认权限沿用 `umask`，`-p` 才会复制权限位（且不会复制 setuid/setgid）。
+- 检索只匹配名字，不搜文件内容；大小写折叠只对 ASCII 可靠；结果在返回前都放在
+  内存里（`SearchReport::matches`），所以超大树 + 无上限的长搜索会吃内存。要按
+  内容搜或流式输出，得另加一层（`SearchOptions::extra_filter` 就是为内容匹配留
+  的接口）。
 
 ## 接 Qt6 的路线
 
@@ -162,3 +170,6 @@ Qt6 还没安装（`pkg-config --modversion Qt6Core` 目前找不到）。装好
    接到 signal 上，UI 线程只更新进度条；取消按钮触发 `is_cancelled`。
 4. `QFileSystemWatcher` 监听当前目录的变化来自动刷新。
 5. `Session` 继续用，只是路径来源从命令行变成地址栏。
+6. 搜索可以直接拿 `search()` 当后台任务跑：每找到一个就让 `SearchReport::matches`
+   增长，用 `on_progress` 更新进度条，用同一个取消令牌接停止按钮；搜索框的过滤
+   条件对应 `SearchOptions` 里的 `mode` / `filter` / `include_hidden` / `max_depth`。

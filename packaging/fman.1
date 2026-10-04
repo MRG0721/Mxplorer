@@ -70,6 +70,32 @@ Draw the directory hierarchy, limited to
 .I depth
 levels if given.
 .TP
+.BI find " " pattern " [" path "] [" options "]"
+Search for entries whose name matches
+.IR pattern .
+The pattern is matched against the name, not the whole path.
+Without
+.B \-E
+or
+.B \-F
+it is a glob
+.RB ( \(aq*\(aq ,
+.RB \(aq?\(aq
+and
+.RB \(aq[...]\(aq );
+a glob that contains no wildcard is treated as
+.BR *pattern* ,
+so
+.B report
+also finds
+.BR quarterly-report.pdf .
+Matching paths are printed to standard output, one absolute path per line; the
+summary and any warnings go to standard error, so the output can be piped.
+.TP
+.B search
+Alias of
+.BR find .
+.TP
 .B help
 List the available commands.
 .TP
@@ -96,6 +122,28 @@ removing.
 .B \-p
 Copy permission bits.
 .TP
+.BR \-i " (find)"
+Ignore case while searching.
+.TP
+.BR \-E " (find)"
+Treat the pattern as an ECMAScript regular expression.
+.TP
+.BR \-F " (find)"
+Treat the pattern as plain text, matched as a substring.
+.TP
+.BR \-t " f|d|l (find)"
+Only regular files, only directories, or only symbolic links.
+.TP
+.BI \-d " depth (find)"
+Do not descend deeper than
+.I depth
+levels; 1 means the direct children of the starting point.
+.TP
+.BI \-n " count (find)"
+Stop after
+.I count
+matches.
+.TP
 .BR \-h ", " \-\-help
 Show the command list.
 .TP
@@ -111,6 +159,9 @@ Copy a tree and keep permission bits:
 .TP
 Show two levels of the hierarchy below the home directory:
 .B fman tree ~ -L 2
+.TP
+Find PDFs anywhere below the home directory, longest list limited to 20:
+.B fman find '*.pdf' ~ -n 20
 .SH "EXIT STATUS"
 .B 0
 on success,
