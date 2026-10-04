@@ -1,11 +1,11 @@
 # Mxplorer
 
-一个跑在 Linux 上的简易文件资源管理器。当前界面是终端里交互式 shell，
+一个跑在 Linux 上的简单的文件资源管理器。当前界面是终端里交互式 shell，
 所有文件系统逻辑集中在一个不依赖任何 UI 的静态库 `mxplorer_core` 里，
 将来的 Qt6 前端只是再加一个可执行文件，不碰 core。
 
-名字来自作者姓名缩写 M.R.G. 的首字母与 Explorer 的结合。品牌写作 Mxplorer，而命令
-名、包名、命名空间与头文件目录一律小写 `mxplorer`（类似 Git 与 `git`）。
+名字来自作者的 Github Username，即 MRG0721 的首字母与 Explorer 的结合。其写作 Mxplorer，而命令
+名、包名、命名空间与头文件目录则是一律小写 `mxplorer`（类似 Git 与 `git`）。
 
 项目还在开发中，没有发布，也不做版本迭代；`build/`、`dist/` 这类产物随时可以删掉
 重新生成。
@@ -97,7 +97,7 @@ mxplorer --version
 man mxplorer
 ```
 
-这台机器上没有装 debhelper，所以脚本不走 `dpkg-buildpackage`：它自己把安装树
+我的设备上没有装 debhelper，所以脚本不走 `dpkg-buildpackage`：它自己把安装树
 铺到 `build/package/` 里（`cmake --install` + `DESTDIR`），写好 control、
 md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
 `Depends` 仍然由 `dpkg-shlibdeps` 算出来，所以依赖串和 debhelper 的结果一致。
@@ -110,15 +110,17 @@ md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
 /usr/share/doc/mxplorer/{copyright,changelog.gz}
 ```
 
-两点要注意：
+注意：
 
 - 维护者署名是 `MRG0721 <271227737+MRG0721@users.noreply.github.com>`：提交作者、
   Debian 包的 `Maintainer`、man page 的作者行都用这个身份。邮箱用的是 GitHub 提供的
-  noreply 地址，提交能关联到账号，同时不会暴露真实邮箱。
+  noreply 地址，提交能关联到账号，我不希望暴露真实邮箱。
 - 依赖是**在本机算出来**的（`libc6 (>= 2.38)`、`libstdc++6 (>= 16)`，因为这里是
-  forky + GCC 16）。也就是说这个包只能装在不低于本机版本的系统上，Debian 12 或
-  Ubuntu 22.04 会因为 libstdc++ 太旧而装不上。要支持更老的目标系统，得用
+  forky + GCC 16）。也就是说这个包只能装在不低于本机版本的系统上，Debian 13 或
+  Ubuntu 26.04 这些东西可能会因为 libstdc++ 太旧而装不上。要支持更老的目标系统，得用
   debootstrap/容器在目标发行版里构建。
+- 暂时**不考虑**兼容性: 我暂时是不考虑对于所有系统的兼容性的，正如上一条所言，"依赖
+  是在本机算出来的"。我现阶段毕竟还是开发初期，该项目目前本就是稚嫩的。
 
 之后想补的：`debian/` 正式源码包布局 + debhelper（这样 `dpkg-buildpackage`、
 `sbuild`、PPA 那套都能直接用），以及把 core 静态库和头文件拆一个 `-dev` 包。
@@ -154,7 +156,7 @@ md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
 目录树、按名字检索（glob / 子串 / 正则，带类型与深度过滤）、进度显示、取消、
 错误分类、端到端冒烟测试。
 
-刻意留的坑（想继续做的话）：
+刻意留的坑：
 
 - 复制被中断会留下不完整的文件（和 `cp` 行为一致）。要更稳妥就改成写临时文件
   再 `rename` 到目标。
@@ -176,31 +178,6 @@ md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
 风格由仓库根目录的 `.clang-format` 固化：4 空格缩进、100 列、注释与 include 不重排、
 短函数不压成单行（`switch` 里的 `case X: return Y;` 允许保持一行）。
 
-重新格式化整个代码树：
-
-```sh
-clang-format -i $(git ls-files '*.hpp' '*.cpp')
-```
-
-这条命令是幂等的：已经符合风格的代码再跑一次不会产生改动。
-
-## 接 Qt6 的路线
-
-Qt6 还没安装（`pkg-config --modversion Qt6Core` 目前找不到）。装好之后大致是：
-
-1. 新建 `gui/`，`find_package(Qt6 COMPONENTS Widgets REQUIRED)`，
-   `add_executable(mxplorer_gui ...)` 并链接 `mxplorer_core`，同时在顶层打开
-   `-DMXPLORER_BUILD_GUI=ON`（当前这个选项会明确报错提示尚未实现）。
-2. 写 `EntryModel : QAbstractItemModel`，内部缓存 `std::vector<FileEntry>`，
-   `refresh()` 调用 `list_directory()`；这一层几乎只是搬运字段。
-3. 操作放 `QThreadPool` / `QtConcurrent::run`，把 `OperationOptions::on_progress`
-   接到 signal 上，UI 线程只更新进度条；取消按钮触发 `is_cancelled`。
-4. `QFileSystemWatcher` 监听当前目录的变化来自动刷新。
-5. `Session` 继续用，只是路径来源从命令行变成地址栏。
-6. 搜索可以直接拿 `search()` 当后台任务跑：每找到一个就让 `SearchReport::matches`
-   增长，用 `on_progress` 更新进度条，用同一个取消令牌接停止按钮；搜索框的过滤
-   条件对应 `SearchOptions` 里的 `mode` / `filter` / `include_hidden` / `max_depth`。
-
 ## 许可证
 
 GPL-3.0-or-later，全文见 [LICENSE](LICENSE)（未改动的 GPLv3 文本）；Debian 包里对应
@@ -209,4 +186,5 @@ GPL-3.0-or-later，全文见 [LICENSE](LICENSE)（未改动的 GPLv3 文本）�
 选 GPLv3 是为了将来接 Qt6 GUI 时能按 GPLv3 选项静态链接 Qt，做成单个自包含的二进制
 包。要注意随之而来的义务：发布静态链接的二进制时，必须提供完整的对应源代码（本项目
 代码 + 所用 Qt 版本源码 + 构建脚本）。LGPLv3 虽然也允许静态链接，但要求让接收者能
-重新链接（例如提供目标文件），GPLv3 没有这层麻烦，代价是整个作品都按 GPLv3 发布。
+重新链接（例如提供目标文件），GPLv3 没有这层麻烦，代价是整个作品都按 GPLv3 发布，但
+无伤大雅。
