@@ -2,7 +2,7 @@ Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: mxplorer
 
 Files: *
-Copyright: 2026 mrg <mrg@localhost>
+Copyright: 2026 MRG0721 <271227737+MRG0721@users.noreply.github.com>
 License: GPL-3.0-or-later
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 mrg
+// Copyright (C) 2026 MRG0721
 
 #include "mxplorer/entry.hpp"
 

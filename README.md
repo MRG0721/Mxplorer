@@ -111,8 +111,9 @@ md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
 
 两点要注意：
 
-- `Maintainer` 和 man page 的作者目前是占位的 `mrg <mrg@localhost>`，要对外发布
-  得换成真实身份。
+- 维护者署名是 `MRG0721 <271227737+MRG0721@users.noreply.github.com>`：提交作者、
+  Debian 包的 `Maintainer`、man page 的作者行都用这个身份。邮箱用的是 GitHub 提供的
+  noreply 地址，提交能关联到账号，同时不会暴露真实邮箱。
 - 依赖是**在本机算出来**的（`libc6 (>= 2.38)`、`libstdc++6 (>= 16)`，因为这里是
   forky + GCC 16）。也就是说这个包只能装在不低于本机版本的系统上，Debian 12 或
   Ubuntu 22.04 会因为 libstdc++ 太旧而装不上。要支持更老的目标系统，得用

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 mrg
+# Copyright (C) 2026 MRG0721
 
 #
 # Builds a .deb for the mxplorer terminal front-end.
@@ -23,7 +23,7 @@ umask 022
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$project_root"
 
-maintainer="mrg <mrg@localhost>"
+maintainer="MRG0721 <271227737+MRG0721@users.noreply.github.com>"
 
 # The artifact carries the brand spelling; the package itself stays lowercase.
 # The distribution comes from the changelog template, so it lives in one place:
