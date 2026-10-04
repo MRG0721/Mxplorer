@@ -3,8 +3,29 @@
 #include "fman/path_utils.hpp"
 
 namespace fman {
+namespace {
 
-Session::Session() : Session(std::filesystem::current_path()) {}
+/// current_path() throws when the working directory has been deleted, which
+/// would abort the process before a single command runs. Land somewhere usable
+/// instead: the home directory if it still exists, otherwise the root.
+std::filesystem::path safe_start_directory() {
+    std::error_code ec;
+    const std::filesystem::path current = std::filesystem::current_path(ec);
+    if (!ec) {
+        return current;
+    }
+
+    std::error_code home_ec;
+    const std::filesystem::path home = home_directory();
+    if (!home.empty() && std::filesystem::is_directory(home, home_ec)) {
+        return home;
+    }
+    return std::filesystem::path("/");
+}
+
+} // namespace
+
+Session::Session() : Session(safe_start_directory()) {}
 
 Session::Session(const std::filesystem::path& start) : home_(home_directory()) {
     std::error_code ec;

@@ -526,6 +526,12 @@ Error remove_path(const fs::path& target, const OperationOptions& options) {
                      "is a directory (use -r to remove recursively)", target);
     }
 
+    // The same safeguard rm(1) has: never wipe out a whole file system.
+    if (fs::is_directory(status) && is_filesystem_root(target)) {
+        return Error(ErrorCode::invalid_argument,
+                     "refusing to remove a file system root", target);
+    }
+
     ProgressReporter reporter("remove", options, scan_tree(target));
     Error result = remove_entry(target, options, reporter);
     if (result.ok()) {

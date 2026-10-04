@@ -54,6 +54,7 @@ FileEntry build_entry(const std::filesystem::path& path,
     const auto modified = std::filesystem::last_write_time(path, ec);
     if (!ec) {
         entry.modified = modified;
+        entry.has_modified = true;
     }
 
     // Directories report 0: their "size" is always the block size of the

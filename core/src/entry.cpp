@@ -81,4 +81,11 @@ std::string format_time(std::filesystem::file_time_type time) {
                        local.tm_min);
 }
 
+std::string format_time(const FileEntry& entry) {
+    if (!entry.has_modified) {
+        return "-";
+    }
+    return format_time(entry.modified);
+}
+
 } // namespace fman

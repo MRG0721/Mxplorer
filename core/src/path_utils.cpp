@@ -57,4 +57,9 @@ std::string pretty_path(const std::filesystem::path& path,
     return target;
 }
 
+bool is_filesystem_root(const std::filesystem::path& path) {
+    const std::filesystem::path normal = path.lexically_normal();
+    return normal.has_root_directory() && normal == normal.root_path();
+}
+
 } // namespace fman

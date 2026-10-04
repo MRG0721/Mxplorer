@@ -262,7 +262,7 @@ void print_long_listing(const std::vector<FileEntry>& entries) {
                                  type_char(entry.type),
                                  format_permissions(entry.permissions),
                                  size,
-                                 format_time(entry.modified),
+                                 format_time(entry),
                                  label);
     }
 }
@@ -343,7 +343,7 @@ void Shell::register_commands() {
         [this](const Args& args) { return cmd_pwd(args); });
     add("cp", "cp [-r] [-f] [-p] src... dst", "copy files or directories",
         [this](const Args& args) { return cmd_cp(args); });
-    add("mv", "mv [-f] src... dst", "move or rename files and directories",
+    add("mv", "mv [-f] [-p] src... dst", "move or rename files and directories",
         [this](const Args& args) { return cmd_mv(args); });
     add("rm", "rm [-r] [-f] path...", "remove files or directory trees",
         [this](const Args& args) { return cmd_rm(args); });
@@ -450,11 +450,14 @@ int Shell::fail(const std::string& message) {
 }
 
 int Shell::usage_error(const std::string& command, const std::vector<char>& unknown_flags) {
-    std::string message = command + ": unknown option" + (unknown_flags.size() > 1 ? "s" : " ");
+    std::string message = command + ": unknown option";
+    if (unknown_flags.size() > 1) {
+        message += 's';
+    }
     for (const char flag : unknown_flags) {
+        message += ' ';
         message += '-';
         message += flag;
-        message += ' ';
     }
 
     const auto it = commands_.find(command);
@@ -683,12 +686,14 @@ int Shell::cmd_stat(const Args& args) {
         }
         first = false;
 
-        const std::string size = entry.is_directory() ? std::string("-") : format_size(entry.size);
+        const std::string size =
+            entry.is_directory() ? std::string("-")
+                                 : std::format("{} ({} bytes)", format_size(entry.size), entry.size);
         std::cout << std::format("{:<12}{}\n", "path", to_utf8(entry.path));
         std::cout << std::format("{:<12}{}\n", "name", entry.name);
         std::cout << std::format("{:<12}{}\n", "type", describe(entry.type));
-        std::cout << std::format("{:<12}{} ({} bytes)\n", "size", size, entry.size);
-        std::cout << std::format("{:<12}{}\n", "modified", format_time(entry.modified));
+        std::cout << std::format("{:<12}{}\n", "size", size);
+        std::cout << std::format("{:<12}{}\n", "modified", format_time(entry));
         std::cout << std::format("{:<12}{}{}\n", "permissions", type_char(entry.type),
                                  format_permissions(entry.permissions));
         std::cout << std::format("{:<12}{}\n", "hidden", entry.is_hidden ? "yes" : "no");

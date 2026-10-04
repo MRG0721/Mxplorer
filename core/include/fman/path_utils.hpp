@@ -22,4 +22,7 @@ std::filesystem::path expand_tilde(const std::filesystem::path& path,
 std::string pretty_path(const std::filesystem::path& path,
                         const std::filesystem::path& home);
 
+/// True for "/" and for paths that normalize to it, such as "/." or "/tmp/..".
+bool is_filesystem_root(const std::filesystem::path& path);
+
 } // namespace fman

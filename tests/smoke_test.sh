@@ -51,6 +51,7 @@ echo "hello" >"$WORK/alpha/one.txt"
 echo "two" >"$WORK/file2.txt"
 echo "ten" >"$WORK/file10.txt"
 ln -s file2.txt "$WORK/link"
+ln -s nowhere "$WORK/dangling"
 mkdir -p "$WORK/.hidden"
 cd "$WORK"
 
@@ -73,6 +74,14 @@ first="$(grep -n 'file2\.txt' <<<"$out" | cut -d: -f1)"
 second="$(grep -n 'file10\.txt' <<<"$out" | cut -d: -f1)"
 if [[ -z "$first" || -z "$second" || "$first" -ge "$second" ]]; then
     fail "expected file2.txt before file10.txt in: $out"
+fi
+ok
+
+# A dangling symlink has no readable timestamp and must not print garbage.
+out="$("$FMAN" ls -l .)"
+contains "$out" " - dangling"
+if [[ "$out" == *2174* ]]; then
+    fail "a dangling symlink must not print a bogus timestamp"
 fi
 ok
 
@@ -148,13 +157,37 @@ out="$("$FMAN" stat file2.txt)"
 contains "$out" "file"
 contains "$out" "permissions"
 
+out="$("$FMAN" stat dangling)"
+contains "$out" "modified    -"
+
+out="$("$FMAN" stat alpha)"
+contains "$out" "size        -"
+
 out="$("$FMAN" help)"
 contains "$out" "mkdir"
+
+out="$("$FMAN" help mv)"
+contains "$out" "[-p]"
 
 # ------------------------------------------------------------- reporting ----
 expect_fail "$FMAN" cd /definitely/not/here
 expect_fail "$FMAN" ls -z .
 expect_fail "$FMAN" definitely-not-a-command
+
+# The unknown option message must not carry a trailing space.
+out="$("$FMAN" ls -z . 2>&1 | head -1)" || true
+[[ "$out" == "error: ls: unknown option -z" ]] || fail "unexpected message: [$out]"
+ok
+
+# Starting with a deleted working directory must not abort the process.
+# Note: remove_path() refusing to delete "/" is deliberately not tested here,
+# because a regression in that guard would destroy the machine running the test.
+mkdir -p "$WORK/gone"
+cwd_exit="$(cd "$WORK/gone" && rmdir "$WORK/gone" && "$FMAN" ls >/dev/null 2>&1; echo $?)"
+if [[ "$cwd_exit" != "0" && "$cwd_exit" != "1" ]]; then
+    fail "a deleted working directory aborted the process (exit $cwd_exit)"
+fi
+ok
 
 # --------------------------------------------------------- interactive ----
 mkdir -p "my dir"

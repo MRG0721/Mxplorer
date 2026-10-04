@@ -29,6 +29,8 @@ struct FileEntry {
     EntryType type = EntryType::other;
     std::uintmax_t size = 0;
     std::filesystem::file_time_type modified{};
+    /// False when the timestamp could not be read, e.g. for a dangling symlink.
+    bool has_modified = false;
     std::filesystem::perms permissions = std::filesystem::perms::unknown;
     bool is_hidden = false;
 
@@ -44,5 +46,8 @@ std::string format_size(std::uintmax_t bytes);
 
 /// "2026-09-29 02:12" in local time.
 std::string format_time(std::filesystem::file_time_type time);
+
+/// "-" when the timestamp could not be read, otherwise the formatted time.
+std::string format_time(const FileEntry& entry);
 
 } // namespace fman
