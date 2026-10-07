@@ -7,6 +7,7 @@
 #include "mxplorer/error.hpp"
 
 #include <filesystem>
+#include <functional>
 #include <string_view>
 #include <vector>
 
@@ -34,10 +35,16 @@ struct ListOptions
     SortKey sort_key = SortKey::name;
     SortOrder sort_order = SortOrder::ascending;
     bool directories_first = true;
+
+    /// Called for every entry whose attributes could not be read. The entry is
+    /// still returned, with FileEntry::has_metadata set to false, so a
+    /// front-end can show the name and report the problem at the same time.
+    std::function<void(const Error&)> on_entry_error{};
 };
 
-/// Reads exactly one directory level. Entries that cannot be stat'ed are
-/// skipped instead of failing the whole listing.
+/// Reads exactly one directory level. A failure to open the directory itself
+/// is an error; an entry whose attributes cannot be read is still listed, with
+/// has_metadata == false, and reported through ListOptions::on_entry_error.
 Result<std::vector<FileEntry>> list_directory(const std::filesystem::path& directory,
                                               const ListOptions& options = {});
 

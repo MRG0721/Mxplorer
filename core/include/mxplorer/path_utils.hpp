@@ -15,10 +15,20 @@ std::string to_utf8(const std::filesystem::path& path);
 
 std::filesystem::path from_utf8(std::string_view text);
 
+/// Lower-cases UTF-8 text for case-insensitive matching.
+///
+/// The conversion goes through the wide-character functions, so non-ASCII
+/// letters are folded whenever the process has a UTF-8 locale selected
+/// (the terminal front-end calls setlocale() at startup). Without one, or for
+/// invalid UTF-8, the affected bytes are left as they are, which degrades to
+/// ASCII folding.
+std::string fold_case_utf8(std::string_view text);
+
 /// $HOME, falling back to the passwd database, falling back to "/".
 std::filesystem::path home_directory();
 
-/// "~" and "~/foo" use the given home directory. "~user" is left untouched.
+/// "~" and "~/foo" use the given home directory; "~user" and "~user/foo" are
+/// looked up in the passwd database. An unknown user is left untouched.
 std::filesystem::path expand_tilde(const std::filesystem::path& path,
                                    const std::filesystem::path& home);
 

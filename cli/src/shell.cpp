@@ -77,6 +77,18 @@ std::string paint(std::string_view text, std::string_view color)
     return std::string(color) + std::string(text) + std::string(kReset);
 }
 
+/// Warnings belong on standard error, and their colour must follow the
+/// terminalness of that stream, not of standard output.
+void print_warning(const Error& error)
+{
+    // Assembled into one string so that a concurrent stdout writer cannot
+    // split the line when both streams land in the same file.
+    const std::string prefix = stderr_is_terminal()
+                                   ? std::string(kYellow) + "warning: " + std::string(kReset)
+                                   : std::string("warning: ");
+    std::cerr << prefix + error.to_string() + "\n";
+}
+
 /// "1 match" / "3 matches", so the summary reads like a sentence.
 std::string plural(std::size_t count, std::string_view singular, std::string_view many)
 {
@@ -386,7 +398,8 @@ void print_short_listing(const std::vector<FileEntry>& entries)
 /// full path for find.
 void print_long_line(const FileEntry& entry, const std::string& label)
 {
-    const std::string size = entry.is_directory() ? std::string("-") : format_size(entry.size);
+    const std::string size =
+        (entry.is_directory() || !entry.has_metadata) ? std::string("-") : format_size(entry.size);
     std::cout << std::format("{}{} {:>9} {} {}\n", type_char(entry.type),
                              format_permissions(entry.permissions), size, format_time(entry),
                              label);
@@ -412,14 +425,14 @@ struct TreeTotals
 };
 
 void print_tree(const fs::path& directory, const std::string& prefix, long depth, long max_depth,
-                TreeTotals& totals)
+                const ListOptions& options, TreeTotals& totals)
 {
     if (max_depth >= 0 && depth >= max_depth)
     {
         return;
     }
 
-    const Result<std::vector<FileEntry>> result = list_directory(directory, ListOptions{});
+    const Result<std::vector<FileEntry>> result = list_directory(directory, options);
     if (!result.ok())
     {
         std::cout << prefix << paint("[unreadable: " + result.error().message + "]", kDim) << '\n';
@@ -442,7 +455,8 @@ void print_tree(const fs::path& directory, const std::string& prefix, long depth
         if (entry.is_directory())
         {
             ++totals.directories;
-            print_tree(entry.path, prefix + (last ? "    " : "│   "), depth + 1, max_depth, totals);
+            print_tree(entry.path, prefix + (last ? "    " : "│   "), depth + 1, max_depth, options,
+                       totals);
         }
         else
         {
@@ -487,10 +501,23 @@ void Shell::register_commands()
         [this](const Args& args) { return cmd_cd(args); });
     add("pwd", "pwd", "print the current directory",
         [this](const Args& args) { return cmd_pwd(args); });
-    add("cp", "cp [-r] [-f] [-p] src... dst", "copy files or directories",
-        [this](const Args& args) { return cmd_cp(args); });
-    add("mv", "mv [-f] [-p] src... dst", "move or rename files and directories",
-        [this](const Args& args) { return cmd_mv(args); });
+    const std::string preserve_details =
+        R"TXT(  -p            keep permissions, timestamps, hard links inside the copied
+                tree, and extended attributes (ACLs travel as posix_acl xattrs)
+)TXT";
+    const std::string copy_details = preserve_details +
+                                     R"TXT(  -f            overwrite an existing destination
+  -r            copy directories recursively
+)TXT";
+    const std::string move_details = preserve_details +
+                                     R"TXT(  -f            overwrite an existing destination
+)TXT";
+    add(
+        "cp", "cp [-r] [-f] [-p] src... dst", "copy files or directories",
+        [this](const Args& args) { return cmd_cp(args); }, {}, copy_details);
+    add(
+        "mv", "mv [-f] [-p] src... dst", "move or rename files and directories",
+        [this](const Args& args) { return cmd_mv(args); }, {}, move_details);
     add("rm", "rm [-r] [-f] path...", "remove files or directory trees",
         [this](const Args& args) { return cmd_rm(args); });
     add("mkdir", "mkdir [-p] path...", "create directories",
@@ -500,7 +527,8 @@ void Shell::register_commands()
     add("tree", "tree [path] [-L depth]", "draw the directory hierarchy",
         [this](const Args& args) { return cmd_tree(args); });
 
-    const std::string find_details = R"TXT(  -i            ignore case
+    const std::string find_details =
+        R"TXT(  -i            ignore case (non-ASCII needs a UTF-8 locale)
   -E            treat the pattern as an ECMAScript regular expression
   -F            treat the pattern as plain text (substring match)
   -l            long format for each match (permissions, size, modified time)
@@ -508,19 +536,26 @@ void Shell::register_commands()
   -t f|d|l      only regular files, only directories, or only symlinks
   -d <depth>    do not descend deeper than this (1 = the root's own entries)
   -n <count>    stop after this many matches
+  -c <text>     only regular files whose contents contain this text
+  -s +N[KMG]    larger than N bytes (K/M/G are 1024-based, for example -s +10M)
+  -s -N[KMG]    smaller than N bytes
+  -m +N[dhms]   modified longer ago than N (for example -m +7d)
+  -m -N[dhms]   modified more recently than N
 
   The pattern is matched against the entry name, not the whole path. Without -E
   or -F it is a glob ('*', '?' and '[...]'); a glob that contains no wildcard is
   treated as "*pattern*", so "report" also finds "quarterly-report.pdf".
   Symbolic links are never followed and the root itself is not a candidate.
+  Several paths may be given; a multi-root search validates every root before
+  it prints anything.
   Matches are printed to standard output, one absolute path per line; the
   summary and any warnings go to standard error so that the output can be piped.
 )TXT";
 
     add(
-        "find", "find <pattern> [path] [options]", "search for entries by name",
+        "find", "find <pattern> [path...] [options]", "search for entries by name or content",
         [this](const Args& args) { return cmd_find(args); }, {}, find_details);
-    add("search", "search <pattern> [path]", "alias of find, same options",
+    add("search", "search <pattern> [path...]", "alias of find, same options",
         [this](const Args& args) { return cmd_find(args); });
     add("clear", "clear", "clear the screen", [this](const Args& args) { return cmd_clear(args); });
     add("exit", "exit", "leave the shell", [this](const Args& args) { return cmd_exit(args); });
@@ -693,6 +728,7 @@ int Shell::cmd_ls(const Args& args)
 
     ListOptions options;
     options.include_hidden = parsed.flags.count('a') > 0;
+    options.on_entry_error = [](const Error& error) { print_warning(error); };
 
     const Result<std::vector<FileEntry>> result = list_directory(path, options);
     if (!result.ok())
@@ -966,7 +1002,12 @@ int Shell::cmd_tree(const Args& args)
         const std::string& arg = args[i];
         if (arg == "-L")
         {
-            if (i + 1 >= args.size() || !parse_depth(args[++i], max_depth))
+            if (i + 1 >= args.size())
+            {
+                return fail("tree: -L expects a depth, for example -L 2");
+            }
+            ++i;
+            if (!parse_depth(args[i], max_depth))
             {
                 return fail("tree: -L expects a depth, for example -L 2");
             }
@@ -1013,7 +1054,9 @@ int Shell::cmd_tree(const Args& args)
         return 0;
     }
 
-    print_tree(root, "", 0, max_depth, totals);
+    ListOptions list_options;
+    list_options.on_entry_error = [](const Error& error) { print_warning(error); };
+    print_tree(root, "", 0, max_depth, list_options, totals);
     std::cout << std::format("\n{} directories, {} files\n", totals.directories, totals.files);
     return 0;
 }
@@ -1021,7 +1064,6 @@ int Shell::cmd_tree(const Args& args)
 int Shell::cmd_find(const Args& args)
 {
     SearchOptions options;
-    std::string target = ".";
     bool long_format = false;
     std::vector<std::string> positional;
 
@@ -1057,6 +1099,95 @@ int Shell::cmd_find(const Args& args)
         {
             return false;
         }
+    };
+
+    // "+10M" is larger than 10 MiB, "-10M" is smaller.
+    const auto parse_size = [](const std::string& text, bool& greater, std::uintmax_t& bytes)
+    {
+        if (text.size() < 2 || (text.front() != '+' && text.front() != '-'))
+        {
+            return false;
+        }
+        greater = text.front() == '+';
+
+        std::size_t index = 1;
+        std::uintmax_t value = 0;
+        bool any_digit = false;
+        while (index < text.size() && std::isdigit(static_cast<unsigned char>(text[index])) != 0)
+        {
+            const std::uintmax_t digit = static_cast<std::uintmax_t>(text[index] - '0');
+            if (value > (std::numeric_limits<std::uintmax_t>::max() - digit) / 10)
+            {
+                return false;
+            }
+            value = value * 10 + digit;
+            any_digit = true;
+            ++index;
+        }
+        if (!any_digit)
+        {
+            return false;
+        }
+
+        std::uintmax_t multiplier = 1;
+        if (index < text.size())
+        {
+            switch (std::toupper(static_cast<unsigned char>(text[index])))
+            {
+                case 'B': multiplier = 1ULL; break;
+                case 'K': multiplier = 1024ULL; break;
+                case 'M': multiplier = 1024ULL * 1024; break;
+                case 'G': multiplier = 1024ULL * 1024 * 1024; break;
+                case 'T': multiplier = 1024ULL * 1024 * 1024 * 1024; break;
+                default: return false;
+            }
+            ++index;
+            if (index < text.size() && std::toupper(static_cast<unsigned char>(text[index])) == 'B')
+            {
+                ++index;
+            }
+        }
+        if (index != text.size() || value > std::numeric_limits<std::uintmax_t>::max() / multiplier)
+        {
+            return false;
+        }
+
+        bytes = value * multiplier;
+        return true;
+    };
+
+    // "+7d" is older than seven days, "-12h" is more recent than twelve hours.
+    const auto parse_age = [](const std::string& text, bool& older, std::chrono::seconds& age)
+    {
+        if (text.size() < 3 || (text.front() != '+' && text.front() != '-'))
+        {
+            return false;
+        }
+        older = text.front() == '+';
+
+        long long value = 0;
+        for (std::size_t index = 1; index + 1 < text.size(); ++index)
+        {
+            if (std::isdigit(static_cast<unsigned char>(text[index])) == 0)
+            {
+                return false;
+            }
+            value = value * 10 + (text[index] - '0');
+            if (value > 1000000000LL)
+            {
+                return false;
+            }
+        }
+
+        switch (text.back())
+        {
+            case 's': age = std::chrono::seconds(value); break;
+            case 'm': age = std::chrono::minutes(value); break;
+            case 'h': age = std::chrono::hours(value); break;
+            case 'd': age = std::chrono::hours(24 * value); break;
+            default: return false;
+        }
+        return true;
     };
 
     for (std::size_t i = 0; i < args.size(); ++i)
@@ -1115,6 +1246,10 @@ int Shell::cmd_find(const Args& args)
             {
                 return fail("find: -d expects a non-negative depth");
             }
+            if (depth > std::numeric_limits<int>::max())
+            {
+                return fail("find: -d is too large");
+            }
             options.max_depth = static_cast<int>(depth);
         }
         else if (arg.rfind("-n", 0) == 0)
@@ -1126,6 +1261,53 @@ int Shell::cmd_find(const Args& args)
                 return fail("find: -n expects a non-negative number");
             }
             options.max_results = static_cast<std::size_t>(limit);
+        }
+        else if (arg.rfind("-c", 0) == 0)
+        {
+            const std::optional<std::string> value = take_value(i, arg, "-c");
+            if (!value)
+            {
+                return fail("find: -c needs the text to look for");
+            }
+            options.content_pattern = *value;
+        }
+        else if (arg.rfind("-s", 0) == 0)
+        {
+            const std::optional<std::string> value = take_value(i, arg, "-s");
+            bool greater = false;
+            std::uintmax_t bytes = 0;
+            if (!value || !parse_size(*value, greater, bytes))
+            {
+                return fail("find: -s expects +N or -N with an optional K/M/G/T unit, "
+                            "for example -s +10M");
+            }
+            if (greater)
+            {
+                options.size_greater_than = bytes;
+            }
+            else
+            {
+                options.size_less_than = bytes;
+            }
+        }
+        else if (arg.rfind("-m", 0) == 0)
+        {
+            const std::optional<std::string> value = take_value(i, arg, "-m");
+            bool older = false;
+            std::chrono::seconds age{};
+            if (!value || !parse_age(*value, older, age))
+            {
+                return fail("find: -m expects +N or -N with a d/h/m/s unit, "
+                            "for example -m +7d");
+            }
+            if (older)
+            {
+                options.older_than = age;
+            }
+            else
+            {
+                options.newer_than = age;
+            }
         }
         else if (arg.size() > 1 && arg.front() == '-')
         {
@@ -1141,37 +1323,31 @@ int Shell::cmd_find(const Args& args)
     {
         return fail("find: needs a pattern; try 'help find'");
     }
-    if (positional.size() > 2)
-    {
-        return fail("find: expected a pattern and at most one path");
-    }
 
     options.pattern = positional.front();
-    if (positional.size() == 2)
-    {
-        target = positional[1];
-    }
 
     if (const Error invalid = validate_search_options(options); !invalid.ok())
     {
         return fail(invalid);
     }
 
-    const fs::path root = session_.resolve(target);
+    std::vector<fs::path> roots;
+    for (std::size_t i = 1; i < positional.size(); ++i)
+    {
+        roots.push_back(session_.resolve(positional[i]));
+    }
+    if (roots.empty())
+    {
+        roots.push_back(session_.resolve("."));
+    }
 
     SearchProgressRenderer progress;
     options.on_progress = std::ref(progress);
     options.is_cancelled = interrupt_token();
-
-    const Result<SearchReport> result = search(root, options);
-    progress.clear();
-    if (!result.ok())
-    {
-        return fail(result.error());
-    }
-
-    const SearchReport& report = result.value();
-    for (const FileEntry& entry : report.matches)
+    // Stream the matches instead of collecting them: a huge result set costs
+    // no memory beyond the walk itself.
+    options.collect_matches = false;
+    options.on_match = [long_format](const FileEntry& entry)
     {
         if (long_format)
         {
@@ -1181,28 +1357,41 @@ int Shell::cmd_find(const Args& args)
         {
             std::cout << to_utf8(entry.path) << '\n';
         }
+    };
+
+    const Result<SearchReport> result = search(roots, options);
+    progress.clear();
+    if (!result.ok())
+    {
+        return fail(result.error());
     }
 
     // Warnings and the summary go to standard error so that the matches stay
     // usable when the output is piped or redirected.
     std::cout.flush();
+    const SearchReport& report = result.value();
+    const std::size_t problems = report.unreadable + report.unreadable_entries;
     for (const Error& skipped : report.skipped)
     {
-        std::cerr << paint("warning: ", kYellow) << skipped.to_string() << '\n';
+        print_warning(skipped);
     }
-    if (report.unreadable > report.skipped.size())
+    if (problems > report.skipped.size())
     {
-        std::cerr << paint("warning: ", kYellow) << report.unreadable - report.skipped.size()
-                  << " more directories could not be read\n";
+        std::cerr << "warning: " << problems - report.skipped.size()
+                  << " more problems were not shown\n";
     }
 
-    std::cerr << std::format("{}, scanned {} in {}",
-                             plural(report.matches.size(), "match", "matches"),
+    std::cerr << std::format("{}, scanned {} in {}", plural(report.matched, "match", "matches"),
                              plural(report.entries, "entry", "entries"),
                              plural(report.directories, "directory", "directories"));
     if (report.unreadable > 0)
     {
         std::cerr << ", " << report.unreadable << " unreadable";
+    }
+    if (report.unreadable_entries > 0)
+    {
+        std::cerr << ", "
+                  << plural(report.unreadable_entries, "entry unreadable", "entries unreadable");
     }
     if (report.truncated)
     {

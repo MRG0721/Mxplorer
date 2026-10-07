@@ -11,9 +11,12 @@
 #include "mxplorer/entry.hpp"
 #include "mxplorer/error.hpp"
 
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -69,9 +72,32 @@ struct SearchOptions
     /// Stop after this many matches. 0 means no limit.
     std::size_t max_results = 0;
 
+    /// Optional content filter, applied after the name matched: a regular file
+    /// must contain this text (raw bytes, binary safe) to match. Empty means
+    /// no content search. Case sensitivity follows case_sensitive.
+    std::string content_pattern{};
+
+    /// Optional size filter in bytes, exclusive bounds. Directories report a
+    /// size of 0, so a "smaller than" filter also matches them.
+    std::optional<std::uintmax_t> size_greater_than{};
+    std::optional<std::uintmax_t> size_less_than{};
+
+    /// Optional age limits relative to the moment the search starts.
+    std::optional<std::chrono::seconds> older_than{};
+    std::optional<std::chrono::seconds> newer_than{};
+
     /// Optional extra condition applied after the name matched. This is the
     /// hook a future content search, or a front-end specific filter, plugs in.
     std::function<bool(const FileEntry&)> extra_filter{};
+
+    /// Called for every match as soon as it is found. A front-end that prints
+    /// here instead of collecting keeps memory bounded on a huge tree.
+    std::function<void(const FileEntry&)> on_match{};
+
+    /// When false, matches are not accumulated in SearchReport::matches;
+    /// SearchReport::matched still counts them. Defaults to true so a caller
+    /// with a small result set can simply read the vector.
+    bool collect_matches = true;
 
     SearchProgressCallback on_progress{};
     CancelToken is_cancelled{};
@@ -80,12 +106,14 @@ struct SearchOptions
 struct SearchReport
 {
     std::vector<FileEntry> matches{};
-    std::size_t directories = 0;  ///< directories whose contents were read
-    std::size_t entries = 0;      ///< entries that were examined
-    std::size_t unreadable = 0;   ///< directories skipped because they failed
-    bool truncated = false;       ///< stopped because max_results was reached
-    bool cancelled = false;       ///< stopped because the cancel token asked
-    std::vector<Error> skipped{}; ///< the first few unreadable directories
+    std::size_t matched = 0;            ///< total matches, collected or not
+    std::size_t directories = 0;        ///< directories whose contents were read
+    std::size_t entries = 0;            ///< entries that were examined
+    std::size_t unreadable = 0;         ///< directories whose contents failed
+    std::size_t unreadable_entries = 0; ///< entries whose attributes/contents failed
+    bool truncated = false;             ///< stopped because max_results was reached
+    bool cancelled = false;             ///< stopped because the cancel token asked
+    std::vector<Error> skipped{};       ///< the first few unreadable directories/entries
 };
 
 /// Walks root depth first and collects every entry whose name matches.
@@ -101,6 +129,12 @@ struct SearchReport
 /// Cancelling is not an error either: the partial report comes back with
 /// cancelled set, so the caller can still show what was found.
 Result<SearchReport> search(const std::filesystem::path& root, const SearchOptions& options = {});
+
+/// Searches several roots in one pass and merges the reports. Every root is
+/// checked before the walk starts, so a typo in the last path fails the search
+/// instead of leaving half of the output already printed.
+Result<SearchReport> search(const std::vector<std::filesystem::path>& roots,
+                            const SearchOptions& options = {});
 
 /// Compiles the pattern without walking anything, so a front-end can reject a
 /// bad pattern before starting a long search.

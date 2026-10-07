@@ -64,7 +64,7 @@ Error error_from_std(const std::error_code& code, const std::filesystem::path& p
         case static_cast<int>(std::errc::permission_denied):
             mapped = ErrorCode::permission_denied;
             break;
-        case static_cast<int>(std::errc::file_exists): mapped = ErrorCode::already_exists; break;
+        case static_cast<int>(std::errc::file_exists):
         case static_cast<int>(std::errc::directory_not_empty):
             mapped = ErrorCode::already_exists;
             break;

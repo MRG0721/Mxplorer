@@ -37,6 +37,10 @@ struct FileEntry
     std::filesystem::file_time_type modified{};
     /// False when the timestamp could not be read, e.g. for a dangling symlink.
     bool has_modified = false;
+    /// False when the attributes could not be read at all. The name is still
+    /// known, so the entry can be displayed, but type, size, permissions and
+    /// time are unknown.
+    bool has_metadata = true;
     std::filesystem::perms permissions = std::filesystem::perms::unknown;
     bool is_hidden = false;
 

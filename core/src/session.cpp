@@ -10,20 +10,33 @@ namespace mxplorer
 namespace
 {
 
+/// lexically_normal() keeps a trailing separator ("/a/." becomes "/a/"), which
+/// makes one directory compare as two different paths: the prompt and pwd
+/// would show "/a/" and "cp -f a/ a" would miss the same-file check. Drop the
+/// separator unless the path is a root.
+std::filesystem::path tidy(std::filesystem::path path)
+{
+    while (path != path.root_path() && path.has_parent_path() && path.filename().empty())
+    {
+        path = path.parent_path();
+    }
+    return path;
+}
+
 /// current_path() throws when the working directory has been deleted, which
 /// would abort the process before a single command runs. Land somewhere usable
 /// instead: the home directory if it still exists, otherwise the root.
 std::filesystem::path safe_start_directory()
 {
     std::error_code ec;
-    const std::filesystem::path current = std::filesystem::current_path(ec);
+    std::filesystem::path current = std::filesystem::current_path(ec);
     if (!ec)
     {
         return current;
     }
 
     std::error_code home_ec;
-    const std::filesystem::path home = home_directory();
+    std::filesystem::path home = home_directory();
     if (!home.empty() && std::filesystem::is_directory(home, home_ec))
     {
         return home;
@@ -45,7 +58,7 @@ Session::Session(const std::filesystem::path& start) : home_(home_directory())
     {
         absolute = start;
     }
-    cwd_ = absolute.lexically_normal();
+    cwd_ = tidy(absolute.lexically_normal());
 }
 
 std::filesystem::path Session::resolve(const std::string& input) const
@@ -67,7 +80,7 @@ std::filesystem::path Session::resolve(const std::string& input) const
 
     std::error_code ec;
     const std::filesystem::path absolute = std::filesystem::absolute(path, ec);
-    return (ec ? path : absolute).lexically_normal();
+    return tidy((ec ? path : absolute).lexically_normal());
 }
 
 Result<std::filesystem::path> Session::resolve_directory(const std::string& input) const

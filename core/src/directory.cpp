@@ -139,8 +139,11 @@ void sort_entries(std::vector<FileEntry>& entries, const ListOptions& options)
 
 int compare_natural(std::string_view left, std::string_view right)
 {
+    // Bytes are compared unsigned: with a signed char, every byte of a
+    // multi-byte UTF-8 name (>= 0x80) would compare as negative and sort
+    // before ASCII, which puts "Ärger" in front of ".hidden".
     auto lower = [](char value)
-    { return static_cast<char>(std::tolower(static_cast<unsigned char>(value))); };
+    { return static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(value))); };
     auto is_digit = [](char value) { return std::isdigit(static_cast<unsigned char>(value)) != 0; };
 
     std::size_t i = 0;
@@ -186,8 +189,8 @@ int compare_natural(std::string_view left, std::string_view right)
             continue;
         }
 
-        const char left_char = lower(left[i]);
-        const char right_char = lower(right[j]);
+        const unsigned char left_char = lower(left[i]);
+        const unsigned char right_char = lower(right[j]);
         if (left_char != right_char)
         {
             return left_char < right_char ? -1 : 1;
@@ -198,7 +201,11 @@ int compare_natural(std::string_view left, std::string_view right)
 
     if (i == left.size() && j == right.size())
     {
-        return 0;
+        // The folded forms are equal (case or leading-zero difference), so
+        // fall back to the raw bytes: this keeps the order a total one, which
+        // std::sort needs to stay deterministic across implementations.
+        const int raw = left.compare(right);
+        return raw < 0 ? -1 : (raw > 0 ? 1 : 0);
     }
     return i == left.size() ? -1 : 1;
 }
@@ -239,13 +246,28 @@ Result<std::vector<FileEntry>> list_directory(const std::filesystem::path& direc
 
         std::error_code item_ec;
         const auto symlink_status = item.symlink_status(item_ec);
-        if (!item_ec)
+        FileEntry entry;
+        if (item_ec)
         {
-            FileEntry entry = build_entry(item.path(), symlink_status, options.follow_symlinks);
-            if (options.include_hidden || !entry.is_hidden)
+            // The name is known even when the attributes are not: show the
+            // entry rather than dropping it, and let the front-end decide
+            // whether to print a warning.
+            entry.path = item.path();
+            entry.name = base_name(entry.path);
+            entry.is_hidden = is_hidden_name(entry.name);
+            entry.has_metadata = false;
+            if (options.on_entry_error)
             {
-                entries.push_back(std::move(entry));
+                options.on_entry_error(error_from_std(item_ec, entry.path));
             }
+        }
+        else
+        {
+            entry = build_entry(item.path(), symlink_status, options.follow_symlinks);
+        }
+        if (options.include_hidden || !entry.is_hidden)
+        {
+            entries.push_back(std::move(entry));
         }
 
         // A directory we cannot descend into should not abort the listing.
