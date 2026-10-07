@@ -17,6 +17,8 @@ exits with the status of that command, which makes it usable from scripts.
 .PP
 Paths may be absolute, relative, or start with
 .BR ~ " for the home directory."
+.B ~user
+is looked up in the passwd database.
 The special path
 .B -
 refers to the previous directory.
@@ -48,8 +50,16 @@ When several sources or an existing directory as destination are given the
 sources are copied into the destination, like
 .BR cp (1).
 Symbolic links are recreated rather than followed.
+Copying writes a temporary file and renames it into place, so an interrupted
+copy never leaves a partial destination behind.
+With
+.B \-p
+permission bits (setuid, setgid and the sticky bit included), timestamps and
+extended attributes are preserved, ACLs travel as the posix_acl attributes,
+and hard links between the copied files stay hard links.
+Sparse files stay sparse.
 .TP
-.BI mv " [\-f] " source " ... " destination
+.BI mv " [\-f] [\-p] " source " ... " destination
 Move or rename files and directories.
 Within one file system this uses
 .BR rename (2);
@@ -73,7 +83,7 @@ Draw the directory hierarchy, limited to
 .I depth
 levels if given.
 .TP
-.BI find " " pattern " [" path "] [" options "]"
+.BI find " " pattern " [" path " ...] [" options "]"
 Search for entries whose name matches
 .IR pattern .
 The pattern is matched against the name, not the whole path.
@@ -92,6 +102,8 @@ so
 .B report
 also finds
 .BR quarterly-report.pdf .
+Several starting paths may be given; every path is checked before anything is
+printed.
 Matching paths are printed to standard output, one absolute path per line; the
 summary and any warnings go to standard error, so the output can be piped.
 .TP
@@ -123,7 +135,8 @@ Overwrite existing destinations, and ignore paths that do not exist when
 removing.
 .TP
 .B \-p
-Copy permission bits.
+Keep permissions, timestamps, extended attributes (including ACLs) and hard
+links between the copied files.
 .TP
 .BR \-i " (find)"
 Ignore case while searching.
@@ -147,6 +160,26 @@ Stop after
 .I count
 matches.
 .TP
+.BI \-c " text (find)"
+Only match regular files whose contents contain
+.IR text .
+.TP
+.BR \-s " +N[KMG] (find)"
+Only match entries larger than
+.I N
+bytes;
+.B \-s \-N[KMG]
+matches entries smaller than
+.IR N .
+The unit letters are 1024-based.
+.TP
+.BR \-m " +N[dhms] (find)"
+Only match entries modified longer ago than
+.IR N ;
+.B \-m \-N[dhms]
+matches entries modified more recently than
+.IR N .
+.TP
 .BR \-h ", " \-\-help
 Show the command list.
 .TP
@@ -165,6 +198,9 @@ Show two levels of the hierarchy below the home directory:
 .TP
 Find PDFs anywhere below the home directory, longest list limited to 20:
 .B mxplorer find '*.pdf' ~ -n 20
+.TP
+Find files whose contents mention a word, older than a week:
+.B mxplorer find '*' ~/Documents -c needle -m +7d
 .SH "EXIT STATUS"
 .B 0
 on success,

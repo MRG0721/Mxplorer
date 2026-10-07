@@ -15,8 +15,10 @@
 ## 构建
 
 需要 CMake 3.20+、支持 C++20 的编译器（GCC 13+ / Clang 16+）。
-除标准库外只用到几个 POSIX 接口：core 用 `pwd.h`（取家目录）和 `fnmatch.h`（检索
-的通配符匹配），前端用 `unistd.h` / `sys/ioctl.h`（终端判断与宽度）和 `signal.h`。
+除标准库外只用到几个 POSIX 接口：core 用 `pwd.h`（取家目录）、`fnmatch.h`（检索的
+通配符匹配）、`sys/stat.h`（属性与时间戳）、`sys/xattr.h`（扩展属性与 ACL）以及少量
+POSIX I/O 调用（`open` / `read` / `write` / `lseek` / `ftruncate` / `utimensat`）；
+前端用 `unistd.h` / `sys/ioctl.h`（终端判断与宽度）和 `signal.h`。
 
 ```sh
 cmake -S . -B build -G Ninja
@@ -49,7 +51,10 @@ mxplorer/
 │   └── src/{main,shell}.cpp
 ├── packaging/                # deb 打包：man page、control 模板、打包脚本
 │   └── build_deb.sh
-└── tests/smoke_test.sh       # 端到端检查，由 ctest 调用
+└── tests/                    # 三套测试，都由 ctest 驱动
+    ├── smoke_test.sh         # 终端前端的端到端检查
+    ├── core_operations_test.cpp  # core 的定点检查（复制原子性）
+    └── core_utils_test.cpp   # 纯函数检查：折叠、路径、排序、错误
 ```
 
 ## 用法
@@ -76,16 +81,16 @@ mxplorer:~/mxplorer$ ls
 | `ls [-a] [-l] [path]` / `ll` | 列目录。`-a` 含隐藏项，`-l` 长格式；目录以 `/` 标记、符号链接以 `@` 标记 |
 | `cd [path]` | 切换目录，`cd` 回家目录，`cd -` 回上一个目录 |
 | `pwd` | 打印当前目录 |
-| `cp [-r] [-f] [-p] src... dst` | 复制。`dst` 是已存在的目录时复制到其内部（同 cp(1)）；符号链接被重建而不跟随 |
-| `mv [-f] src... dst` | 移动/改名。同一文件系统走 `rename(2)`，跨设备自动退化为复制+删除 |
+| `cp [-r] [-f] [-p] src... dst` | 复制。`dst` 是已存在的目录时复制到其内部（同 cp(1)）；符号链接被重建而不跟随。`-p` 保留权限、时间戳、硬链接与扩展属性（ACL），稀疏文件保持稀疏 |
+| `mv [-f] [-p] src... dst` | 移动/改名。同一文件系统走 `rename(2)`，跨设备自动退化为复制+删除 |
 | `rm [-r] [-f] path...` | 删除。目录需要 `-r`；`-f` 让不存在的路径静默通过 |
 | `mkdir [-p] path...` | 建目录，`-p` 建父目录且对已存在目录静默 |
 | `stat path...` | 显示类型、大小、mtime、权限位 |
 | `tree [path] [-L depth]` | 打印目录树 |
-| `find <pattern> [path] [选项]` / `search` | 按名字检索，结果逐行打印绝对路径；`-i` 忽略大小写、`-E` 正则、`-F` 字面、`-l` 长格式、`-a` 含隐藏、`-t f\|d\|l` 类型、`-d N` 深度、`-n N` 上限 |
-| `help` / `clear` / `exit` | — |
+| `find <pattern> [path...] [选项]` / `search` | 按名字或内容检索，结果逐行打印绝对路径；`-i` 忽略大小写、`-E` 正则、`-F` 字面、`-l` 长格式、`-a` 含隐藏、`-t f\|d\|l` 类型、`-d N` 深度、`-n N` 上限、`-c text` 内容、`-s ±N[KMG]` 大小、`-m ±N[dhms]` 时间 |
+| `help` / `clear` / `exit` / `quit` | — |
 
-路径支持 `~`、`~`/相对路径、`-`，以及 `'单引号'`、`"双引号"`、反斜杠转义
+路径支持 `~`、`~user`、`~`/相对路径、`-`，以及 `'单引号'`、`"双引号"`、反斜杠转义
 （`cd "my dir"` 可以正常工作）。
 
 ## 打包成 deb
@@ -144,7 +149,7 @@ md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
    core 的签名不用动。Ctrl-C 也接到同一个取消令牌上：复制到一半按 Ctrl-C
    会得到一个干净的 `cancelled` 错误，而不是把进程打死。检索用的是同一套约定
    （`SearchOptions::on_progress` 与 `is_cancelled`），只是进度字段换成了已扫描
-   条目数。
+   条目数，另外匹配结果可以通过 `on_match` 流式输出而不是先收集。
 
 4. **UI 状态放在 `Session`**。它只保存 cwd、home、上一个目录，并负责把用户
    输入解析成绝对路径。Qt 前端同样复用它。
@@ -155,23 +160,37 @@ md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
 ## 已实现 / 尚未实现
 
 已实现：列目录（含自然序、目录优先）、详细信息、复制、移动、删除、建目录、
-目录树、按名字检索（glob / 子串 / 正则，带类型与深度过滤）、进度显示、取消、
-错误分类、端到端冒烟测试。
+目录树、按名字或内容检索（glob / 子串 / 正则，带类型、深度、大小与时间过滤，
+可一次搜多个起点）、进度显示、取消、错误分类，以及三套测试（shell 冒烟测试、
+复制原子性的 core 测试、纯函数的单元检查）。Qt6 前端尚未实现，当前只有终端界面。
 
-刻意留的坑：
+几个需要知道的行为：
 
-- 复制被中断会留下不完整的文件（和 `cp` 行为一致）。要更稳妥就改成写临时文件
-  再 `rename` 到目标。
-- 不保留硬链接、ACL、xattr，也没做稀疏文件优化。
-- 目录里个别条目取不到属性时会静默跳过（不报错、不提示）。整棵目录打不开则是
-  硬错误：`ls` 报 `Permission denied`，`tree` 打印 `[unreadable: ...]` 后继续，
-  `cp -r` / `rm -r` 直接失败，不会产出不完整的副本。
-- 不支持 `~user`。
-- `cp` 的默认权限沿用 `umask`，`-p` 才会复制权限位（且不会复制 setuid/setgid）。
-- 检索只匹配名字，不搜文件内容；大小写折叠只对 ASCII 可靠；结果在返回前都放在
-  内存里（`SearchReport::matches`），所以超大树 + 无上限的长搜索会吃内存。要按
-  内容搜或流式输出，得另加一层（`SearchOptions::extra_filter` 就是为内容匹配留
-  的接口）。
+- 复制先写临时文件（目标目录下的 `.名字.mxplorer-partial.<pid>.<n>`），写完再
+  `rename` 就位，所以被中断或失败的复制不会留下半成品目标文件，临时文件也会
+  被清理。
+- Ctrl-C 能干净地取消正在进行的复制/检索。其它终止信号（SIGTERM、SIGKILL）
+  没有接管，因此可能留下隐藏的 `.mxplorer-partial` 文件——和普通 `cp` 被终止
+  后留下半成品目标文件是同一性质。
+- `-p` 保留权限位（含 setuid、setgid、sticky）、时间戳、扩展属性（ACL 以
+  `system.posix_acl_*` 属性存储），以及同一棵树内文件之间的硬链接关系。
+  属主不保留：那需要 root 权限。
+- 稀疏文件通过 `SEEK_DATA` / `SEEK_HOLE` 复制，空洞仍是空洞，不会被写成实打实
+  的零。
+- 名字按自然序排列（`file2` 在 `file10` 前），ASCII 部分忽略大小写；其余按
+  无符号字节序比较，折叠后相同的名字再按原始字节排序，所以顺序是全序且可复现。
+- 读不到属性的条目仍会列出（`ls -l` 显示 `?` 与未知字段）并给出警告，不再悄悄
+  消失。整棵目录打不开仍是硬错误：`ls` 报 `Permission denied`，`tree` 打印
+  `[unreadable: ...]` 后继续，`cp -r` / `rm -r` 直接失败，不会产出不完整的副本。
+- 把目录复制或移动进它自身会被拒绝，检查还覆盖用符号链接拼出来的目标写法
+  （`link -> src` 时执行 `cp -r src link/inner`），递归复制不会失控地灌进源目录。
+- `~user` 与 `~user/路径` 会到 passwd 数据库里查；查不到的用户按普通名字处理。
+- 忽略大小写会走进程的 locale 折叠：UTF-8 locale 下非 ASCII 字母也能匹配，没有
+  locale 时退化为 ASCII 折叠。
+- 检索在 `collect_matches` 为假时通过 `SearchOptions::on_match` 流式输出，超大树
+  也只占有限内存；想要结果数组的调用方可以保持默认收集。
+- 明确不做：保留属主、reflink/clone 优化、交互式行编辑/历史/补全、双横线长选项、
+  复制管道/套接字/设备文件、单个超大目录的进度、回收站与撤销。
 
 ## 代码风格
 
