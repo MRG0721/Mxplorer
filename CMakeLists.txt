@@ -28,7 +28,7 @@ option(MXPLORER_WARNINGS_AS_ERRORS "Turn compiler warnings into errors" OFF)
 if(MXPLORER_BUILD_GUI)
     message(FATAL_ERROR
         "The Qt6 front-end is not implemented yet. "
-        "Set -DMXPLORER_BUILD_GUI=OFF and see README.md for the roadmap.")
+        "Set -DMXPLORER_BUILD_GUI=OFF to build the terminal front-end.")
 endif()
 
 add_subdirectory(core)
@@ -40,8 +40,31 @@ if(MXPLORER_BUILD_CLI)
 endif()
 
 include(CTest)
-if(BUILD_TESTING AND MXPLORER_BUILD_CLI)
-    add_test(
-        NAME cli_smoke
-        COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/tests/smoke_test.sh" "$<TARGET_FILE:mxplorer_cli>")
+if(BUILD_TESTING)
+    add_executable(mxplorer_core_test tests/core_operations_test.cpp)
+    target_link_libraries(mxplorer_core_test PRIVATE mxplorer_core)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(mxplorer_core_test PRIVATE -Wall -Wextra -Wpedantic)
+        if(MXPLORER_WARNINGS_AS_ERRORS)
+            target_compile_options(mxplorer_core_test PRIVATE -Werror)
+        endif()
+    endif()
+    add_test(NAME core_operations COMMAND mxplorer_core_test)
+
+    add_executable(mxplorer_core_utils_test tests/core_utils_test.cpp)
+    target_link_libraries(mxplorer_core_utils_test PRIVATE mxplorer_core)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(mxplorer_core_utils_test PRIVATE -Wall -Wextra -Wpedantic)
+        if(MXPLORER_WARNINGS_AS_ERRORS)
+            target_compile_options(mxplorer_core_utils_test PRIVATE -Werror)
+        endif()
+    endif()
+    add_test(NAME core_utils COMMAND mxplorer_core_utils_test)
+
+    if(MXPLORER_BUILD_CLI)
+        add_test(
+            NAME cli_smoke
+            COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/tests/smoke_test.sh"
+                    "$<TARGET_FILE:mxplorer_cli>")
+    endif()
 endif()

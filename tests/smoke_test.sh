@@ -19,7 +19,9 @@ fi
 MXPLORER="$(cd "$(dirname "$MXPLORER")" && pwd)/$(basename "$MXPLORER")"
 
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+# Some checks deliberately leave directories without permissions behind, so
+# give the owner its bits back before the final removal.
+trap 'chmod -R u+rwX "$WORK" 2>/dev/null || true; rm -rf "$WORK"' EXIT
 
 checks=0
 fail() {
@@ -158,10 +160,137 @@ ok
 expect_ok "$MXPLORER" rm -r beta
 expect_ok "$MXPLORER" rm copy.txt link2
 
+# --------------------------------------------------------- copy fidelity ----
+# -p keeps permissions (setuid included) and timestamps.
+mkdir -p "$WORK/fidelity"
+printf 'x' >"$WORK/fidelity/mode.txt"
+chmod 4755 "$WORK/fidelity/mode.txt"
+touch -d '2001-02-03 04:05:06' "$WORK/fidelity/mode.txt"
+expect_ok "$MXPLORER" cp -p "$WORK/fidelity/mode.txt" "$WORK/fidelity/mode-copy.txt"
+[[ "$(stat -c '%a' "$WORK/fidelity/mode-copy.txt")" == "4755" ]] ||
+    fail "cp -p must keep the setuid bit and the permission bits"
+ok
+source_mtime="$(stat -c '%Y' "$WORK/fidelity/mode.txt")"
+copy_mtime="$(stat -c '%Y' "$WORK/fidelity/mode-copy.txt")"
+[[ "$copy_mtime" == "$source_mtime" ]] || fail "cp -p must keep the modification time"
+ok
+
+# -p also reaches directories, not just regular files.
+mkdir -p "$WORK/fidelity/dirmode/sub"
+echo x >"$WORK/fidelity/dirmode/sub/file.txt"
+chmod 750 "$WORK/fidelity/dirmode"
+expect_ok "$MXPLORER" cp -r -p "$WORK/fidelity/dirmode" "$WORK/fidelity/dirmode-copy"
+[[ "$(stat -c '%a' "$WORK/fidelity/dirmode-copy")" == "750" ]] ||
+    fail "cp -r -p must keep directory permissions"
+ok
+
+# -p recreates hard links inside the copied tree; a plain copy does not.
+mkdir -p "$WORK/fidelity/links"
+echo "data" >"$WORK/fidelity/links/one"
+ln "$WORK/fidelity/links/one" "$WORK/fidelity/links/two"
+expect_ok "$MXPLORER" cp -r -p "$WORK/fidelity/links" "$WORK/fidelity/links-copy"
+[[ "$WORK/fidelity/links-copy/one" -ef "$WORK/fidelity/links-copy/two" ]] ||
+    fail "cp -r -p must recreate hard links"
+ok
+expect_ok "$MXPLORER" cp -r "$WORK/fidelity/links" "$WORK/fidelity/links-plain"
+if [[ "$WORK/fidelity/links-plain/one" -ef "$WORK/fidelity/links-plain/two" ]]; then
+    fail "a plain cp must keep the two files independent"
+fi
+ok
+
+# -p carries extended attributes (ACLs are stored the same way).
+if command -v python3 >/dev/null 2>&1 &&
+    python3 -c 'import os,sys; open(sys.argv[1],"w").write("x"); os.setxattr(sys.argv[1],b"user.smoke",b"payload")' \
+        "$WORK/fidelity/xattr" 2>/dev/null; then
+    expect_ok "$MXPLORER" cp -p "$WORK/fidelity/xattr" "$WORK/fidelity/xattr-copy"
+    if ! python3 -c 'import os,sys; sys.exit(0 if os.getxattr(sys.argv[1],b"user.smoke")==b"payload" else 1)' \
+        "$WORK/fidelity/xattr-copy"; then
+        fail "cp -p must preserve extended attributes"
+    fi
+    ok
+else
+    echo "note: user xattrs unavailable here, skipped the xattr check" >&2
+fi
+
+# Sparseness survives a copy: a 16 MiB file with one small extent must not
+# turn into 16 MiB of written blocks.
+truncate -s 16M "$WORK/fidelity/sparse"
+printf 'data' | dd of="$WORK/fidelity/sparse" bs=1 seek=15000000 conv=notrunc status=none
+expect_ok "$MXPLORER" cp "$WORK/fidelity/sparse" "$WORK/fidelity/sparse-copy"
+cmp -s "$WORK/fidelity/sparse" "$WORK/fidelity/sparse-copy" ||
+    fail "the sparse copy has different contents"
+ok
+sparse_blocks="$(stat -c '%b' "$WORK/fidelity/sparse-copy")"
+((sparse_blocks * 512 < 8 * 1024 * 1024)) ||
+    fail "the copy lost sparseness (allocated $((sparse_blocks * 512)) bytes)"
+ok
+
+# An interrupted copy must never leave a partial destination behind, and must
+# clean up its temporary file.
+mkdir -p "$WORK/fidelity/interrupt" "$WORK/fidelity/interrupt-dst"
+dd if=/dev/zero of="$WORK/fidelity/interrupt/payload" bs=1M count=384 status=none
+"$MXPLORER" cp "$WORK/fidelity/interrupt/payload" "$WORK/fidelity/interrupt-dst/payload" &
+copy_pid=$!
+sleep 0.05
+kill -INT "$copy_pid" 2>/dev/null || true
+copy_status=0
+wait "$copy_pid" || copy_status=$?
+leftovers="$(find "$WORK/fidelity/interrupt-dst" -name '*.mxplorer-partial.*' -print)"
+[[ -z "$leftovers" ]] || fail "an interrupted copy left temporary files: $leftovers"
+ok
+interrupted_dest="$WORK/fidelity/interrupt-dst/payload"
+if [[ -e "$interrupted_dest" ]]; then
+    cmp -s "$WORK/fidelity/interrupt/payload" "$interrupted_dest" ||
+        fail "the interrupted copy left a partial destination file"
+    [[ "$copy_status" == "0" ]] ||
+        fail "the copy reported failure but produced a destination file"
+    ok
+else
+    [[ "$copy_status" != "0" ]] ||
+        fail "the copy reported success without producing a destination file"
+    ok
+fi
+
 # ------------------------------------------------------------ inspection ----
+# A directory must not be copied or moved into itself through a symlinked
+# spelling; the lexical check alone misses "cp -r src link/inner".
+mkdir -p "$WORK/selfsrc"
+echo "keep" >"$WORK/selfsrc/f.txt"
+ln -s selfsrc "$WORK/selflink"
+expect_fail "$MXPLORER" cp -r "$WORK/selfsrc" "$WORK/selflink/inner"
+[[ "$(find "$WORK/selfsrc" -mindepth 1 | wc -l)" == "1" ]] ||
+    fail "a refused self-copy polluted the source tree"
+ok
+expect_fail "$MXPLORER" mv "$WORK/selfsrc" "$WORK/selflink/inner"
+
+# rm on a symlink removes the link, never what it points at.
+mkdir -p "$WORK/target-dir"
+echo "data" >"$WORK/target-dir/file"
+ln -s target-dir "$WORK/dirlink"
+expect_ok "$MXPLORER" rm "$WORK/dirlink"
+[[ ! -e "$WORK/dirlink" && -f "$WORK/target-dir/file" ]] ||
+    fail "rm must not follow a symlink"
+ok
+
+# Non-ASCII names sort by unsigned bytes: dot first, ASCII, then multi-byte.
+mkdir -p "$WORK/sortcheck"
+touch "$WORK/sortcheck/.hidden" "$WORK/sortcheck/z.txt" "$WORK/sortcheck/Ärger.txt"
+out="$("$MXPLORER" ls -al "$WORK/sortcheck")"
+first="$(grep -n '\.hidden' <<<"$out" | cut -d: -f1)"
+second="$(grep -n 'z\.txt' <<<"$out" | cut -d: -f1)"
+third="$(grep -n 'Ärger' <<<"$out" | cut -d: -f1)"
+if [[ -z "$first" || -z "$second" || -z "$third" || "$first" -ge "$second" ||
+    "$second" -ge "$third" ]]; then
+    fail "non-ASCII names must sort by unsigned bytes: $out"
+fi
+ok
+
 out="$("$MXPLORER" tree .)"
 contains "$out" "directories,"
 contains "$out" "one.txt"
+
+out="$("$MXPLORER" tree file2.txt)"
+contains "$out" "0 directories, 1 file"
 
 out="$("$MXPLORER" stat file2.txt)"
 contains "$out" "file"
@@ -256,10 +385,84 @@ expect_fail "$MXPLORER" find
 expect_fail "$MXPLORER" find 'x' -Z
 expect_fail "$MXPLORER" find 'x' -t q .
 
+# ------------------------------------------------------- finder extras ----
+mkdir -p "$WORK/content/notes"
+echo "alpha needle" >"$WORK/content/note.txt"
+echo "nothing here" >"$WORK/content/plain.txt"
+printf 'zzz\000needle' >"$WORK/content/binary.dat"
+echo "report" >"$WORK/content/notes/deep-report.txt"
+head -c 4096 /dev/zero >"$WORK/content/big.dat"
+touch -d '10 days ago' "$WORK/content/old.txt"
+
+# Content search, binary safe, case folding honours -i.
+out="$("$MXPLORER" find '*' "$WORK/content" -c needle 2>/dev/null)"
+contains "$out" "note.txt"
+contains "$out" "binary.dat"
+out="$("$MXPLORER" find '*' "$WORK/content" -c NEEDLE 2>/dev/null)"
+[[ -z "$out" ]] || fail "-c without -i must be case sensitive: $out"
+ok
+out="$("$MXPLORER" find '*' "$WORK/content" -c NEEDLE -i 2>/dev/null)"
+contains "$out" "note.txt"
+
+# Size and modification-time filters.
+out="$("$MXPLORER" find '*' "$WORK/content" -t f -s +1K 2>/dev/null)"
+[[ "$(lines_of "$out")" == "1" ]] || fail "-s +1K should only match the big file: $out"
+contains "$out" "big.dat"
+out="$("$MXPLORER" find '*' "$WORK/content" -t f -s -1K 2>/dev/null)"
+if [[ "$out" == *"big.dat"* ]]; then
+    fail "-s -1K must not match the big file: $out"
+fi
+ok
+out="$("$MXPLORER" find '*' "$WORK/content" -t f -m +7d 2>/dev/null)"
+[[ "$(lines_of "$out")" == "1" ]] || fail "-m +7d should only match the old file: $out"
+contains "$out" "old.txt"
+out="$("$MXPLORER" find '*' "$WORK/content" -t f -m -7d 2>/dev/null)"
+if [[ "$out" == *"old.txt"* ]]; then
+    fail "-m -7d must not match the old file: $out"
+fi
+ok
+
+# Several roots in one command; a bad root fails before printing anything.
+out="$("$MXPLORER" find '*.txt' "$WORK/content" "$WORK/search" 2>/dev/null)"
+contains "$out" "note.txt"
+contains "$out" "report.txt"
+expect_fail "$MXPLORER" find '*.txt' "$WORK/content" "$WORK/definitely-missing"
+out="$("$MXPLORER" find '*.txt' "$WORK/content" "$WORK/definitely-missing" 2>/dev/null || true)"
+[[ -z "$out" ]] || fail "a bad root must be rejected before any match is printed"
+ok
+
+# Non-ASCII case folding (needs a UTF-8 locale; the test sets one explicitly).
+printf 'x' >"$WORK/content/Ärger.txt"
+out="$(LC_ALL=C.UTF-8 "$MXPLORER" find -F 'ärger' -i "$WORK/content" 2>/dev/null)"
+contains "$out" "Ärger.txt"
+
+# -i must not mangle regex escape classes: \D stays "not a digit".
+printf 'x' >"$WORK/content/nXyZ2.txt"
+out="$("$MXPLORER" find -E 'n\D+2' -i "$WORK/content" 2>/dev/null)"
+contains "$out" "nXyZ2.txt"
+
+# The new value options reject malformed input.
+expect_fail "$MXPLORER" find '*' "$WORK/content" -s 10
+expect_fail "$MXPLORER" find '*' "$WORK/content" -m 7d
+expect_fail "$MXPLORER" find '*' "$WORK/content" -s +10Q
+expect_fail "$MXPLORER" find '*' "$WORK/content" -m +7x
+# A depth that does not fit an int must be rejected, not silently truncated
+# (4294967297 used to wrap to 1 and quietly mean "direct children only").
+expect_fail "$MXPLORER" find '*' "$WORK/content" -d 4294967297
+expect_fail "$MXPLORER" find '*' "$WORK/content" -n 9223372036854775808
+
 # ------------------------------------------------------------- reporting ----
 expect_fail "$MXPLORER" cd /definitely/not/here
 expect_fail "$MXPLORER" ls -z .
 expect_fail "$MXPLORER" definitely-not-a-command
+
+# ~user expands through the passwd database; an unknown user stays literal.
+if getent passwd root >/dev/null 2>&1; then
+    root_home="$(getent passwd root | cut -d: -f6)"
+    out="$("$MXPLORER" stat '~root' 2>&1 || true)"
+    contains "$out" "$root_home"
+fi
+expect_fail "$MXPLORER" stat '~no-such-user-mxplorer'
 
 # The unknown option message must not carry a trailing space.
 out="$("$MXPLORER" ls -z . 2>&1 | head -1)" || true
@@ -302,9 +505,30 @@ if [[ "$(id -u)" != "0" ]]; then
     # ...but an unreadable root is the answer, not something to skip.
     expect_fail "$MXPLORER" find '*' "$WORK/locked"
 
+    # An entry whose attributes cannot be read is still listed, with unknown
+    # metadata, and reported instead of vanishing silently.
+    mkdir -p "$WORK/attrs/inner"
+    echo "secret" >"$WORK/attrs/inner/file.txt"
+    chmod 400 "$WORK/attrs"
+    out="$("$MXPLORER" ls "$WORK/attrs" 2>"$WORK/attrs.err")"
+    contains "$out" "inner"
+    contains "$(cat "$WORK/attrs.err")" "Permission denied"
+    out="$("$MXPLORER" ls -l "$WORK/attrs" 2>/dev/null)"
+    contains "$out" "?????????"
+    out="$("$MXPLORER" find 'inner' "$WORK/attrs" 2>/dev/null)"
+    contains "$out" "inner"
+    err="$("$MXPLORER" find '*' "$WORK/attrs" 2>&1 >/dev/null)"
+    contains "$err" "1 entry unreadable"
+    chmod 755 "$WORK/attrs"
+
     chmod 755 "$WORK/locked"
     rm -rf "$WORK/locked-copy"
 fi
+
+# No temporary copy files may survive anywhere in the test tree.
+leftovers="$(find "$WORK" -name '*.mxplorer-partial.*' -print)"
+[[ -z "$leftovers" ]] || fail "temporary copy files were left behind: $leftovers"
+ok
 
 # --------------------------------------------------------- interactive ----
 mkdir -p "my dir"
@@ -313,5 +537,12 @@ echo "spaced" >"my dir/spaced file.txt"
 out="$(printf 'cd "my dir"\npwd\nls\nexit\n' | "$MXPLORER")"
 contains "$out" "spaced file.txt"
 contains "$out" "my dir\$"
+
+# A trailing slash must not stick to the working directory (prompt and pwd).
+out="$(printf 'cd "my dir"/\npwd\nexit\n' | "$MXPLORER")"
+if [[ "$out" == *"my dir/"* ]]; then
+    fail "a trailing slash leaked into the working directory: $out"
+fi
+ok
 
 echo "all $checks checks passed"
