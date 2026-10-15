@@ -1,5 +1,23 @@
 mxplorer (@VERSION@) unstable; urgency=low
 
-  * Initial packaging of the terminal front-end.
+  * Second alpha.
+  * Close the documented functional gaps: copies write a temporary file and
+    rename it into place, -p keeps permissions, timestamps, extended
+    attributes (ACLs) and hard links, sparse files stay sparse, and the
+    interactive path resolves ~user.
+  * Search can match file contents (-c), filter by size (-s) and age (-m),
+    take several roots at once and stream its results instead of collecting
+    them in memory.
+  * Fix the edge cases found by the test campaign: -d overflow, unsigned byte
+    natural ordering, copying a directory into itself through a symlink, and
+    trailing separators in resolved paths.
+  * Add core unit tests and end-to-end regression coverage; ctest now runs
+    core_operations, core_utils and cli_smoke.
 
  -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  @DATE@
+
+mxplorer (0.0.1) unstable; urgency=low
+
+  * Initial packaging of the terminal front-end.
+
+ -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  Wed, 07 Oct 2026 07:55:31 +0800

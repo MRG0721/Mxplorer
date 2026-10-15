@@ -69,7 +69,7 @@ Interactive mode
 
 ```
 $ ./build/cli/mxplorer
-mxplorer 0.0.1 | type 'help' for commands, 'exit' to quit
+mxplorer 0.0.2 | type 'help' for commands, 'exit' to quit
 mxplorer:~$ cd mxplorer
 mxplorer:~/mxplorer$ ls
 ...
@@ -104,9 +104,9 @@ Paths support `~`, `~user`, `~`/relative/path, `-`, as well as `'single quotes'`
 
 ```sh
 ./packaging/build_deb.sh
-# ==> dist/Mxplorer-0.0.1-unstable-amd64.deb
+# ==> dist/Mxplorer-0.0.2-unstable-amd64.deb
 
-sudo apt install ./dist/Mxplorer-0.0.1-unstable-amd64.deb
+sudo apt install ./dist/Mxplorer-0.0.2-unstable-amd64.deb
 mxplorer --version
 man mxplorer
 ```
