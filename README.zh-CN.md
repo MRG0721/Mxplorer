@@ -103,13 +103,18 @@ mxplorer:~/mxplorer$ ls
 
 ```sh
 ./packaging/build_deb.sh
-# ==> dist/Mxplorer-0.0.2-alpha.2-unstable-amd64.deb
-# ==> dist/Mxplorer-0.0.2-alpha.2-linux-amd64-static.tar.gz
+# ==> dist/Mxplorer-0.0.2-alpha.2-forky-amd64.deb
+# ==> dist/Mxplorer-0.0.2-alpha.2-forky-linux-amd64-static.tar.gz
 
-sudo apt install ./dist/Mxplorer-0.0.2-alpha.2-unstable-amd64.deb
+sudo apt install ./dist/Mxplorer-0.0.2-alpha.2-forky-amd64.deb
 mxplorer --version
 man mxplorer
 ```
+
+`forky` 是文件名里的构建平台标记，属于临时信息：手工完成兼容性验证后，把
+`packaging/build_deb.sh` 里的 `platform` 置空，文件名就变成
+`Mxplorer-<版本>-<架构>.deb` 与
+`Mxplorer-<版本>-linux-<架构>-static.tar.gz`。
 
 `build_deb.sh` 会先调用 `build_static.sh`（所以测试一定会跑），复制并 strip
 二进制，把安装树铺在 `build/musl/stage/` 下，写好 control、md5sums、copyright、

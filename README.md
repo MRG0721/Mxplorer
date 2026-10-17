@@ -112,13 +112,19 @@ Paths support `~`, `~user`, `~`/relative/path, `-`, as well as `'single quotes'`
 
 ```sh
 ./packaging/build_deb.sh
-# ==> dist/Mxplorer-0.0.2-alpha.2-unstable-amd64.deb
-# ==> dist/Mxplorer-0.0.2-alpha.2-linux-amd64-static.tar.gz
+# ==> dist/Mxplorer-0.0.2-alpha.2-forky-amd64.deb
+# ==> dist/Mxplorer-0.0.2-alpha.2-forky-linux-amd64-static.tar.gz
 
-sudo apt install ./dist/Mxplorer-0.0.2-alpha.2-unstable-amd64.deb
+sudo apt install ./dist/Mxplorer-0.0.2-alpha.2-forky-amd64.deb
 mxplorer --version
 man mxplorer
 ```
+
+The `forky` segment is a build-platform tag in the file name. It is temporary:
+after the compatibility matrix has been checked by hand, set `platform=""` in
+`packaging/build_deb.sh` and the names become
+`Mxplorer-<version>-<arch>.deb` and
+`Mxplorer-<version>-linux-<arch>-static.tar.gz`.
 
 `build_deb.sh` calls `build_static.sh` (so the test suites always run), strips
 a copy of the binary, and lays out the install tree under `build/musl/stage/`.

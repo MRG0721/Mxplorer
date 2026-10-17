@@ -8,8 +8,12 @@
 #   ./packaging/build_deb.sh
 #
 # Output:
-#   dist/Mxplorer-<version>-<distribution>-<arch>.deb
-#   dist/Mxplorer-<version>-linux-<arch>-static.tar.gz
+#   dist/Mxplorer-<version>-<platform>-<arch>.deb
+#   dist/Mxplorer-<version>-<platform>-linux-<arch>-static.tar.gz
+#
+# <platform> is a build-platform tag in the file name. It is "forky" until the
+# compatibility matrix has been verified by hand; set platform="" below to
+# drop it.
 #
 # The binary is produced by packaging/build_static.sh, which builds and tests a
 # static-pie binary inside a pinned Alpine rootfs. The deb deliberately has no
@@ -27,9 +31,12 @@ cd "$project_root"
 maintainer="MRG0721 <271227737+MRG0721@users.noreply.github.com>"
 
 # The artifact carries the brand spelling; the package itself stays lowercase.
-# The distribution comes from the changelog template, so it lives in one place:
-# "unstable" while the project is under development.
 brand="Mxplorer"
+
+# Build-platform tag in the artifact names. It names the environment that
+# produced the package. Once compatibility has been verified by hand, set this
+# to an empty string so the deb becomes Mxplorer-<version>-<arch>.deb.
+platform="forky"
 
 die()
 {
@@ -55,9 +62,6 @@ version="$version_base"
 arch="$(dpkg --print-architecture)"
 [[ "$arch" == "amd64" ]] ||
     die "the pinned static toolchain currently targets amd64 only"
-
-distribution="$(sed -n '1s/.*) *\([^;]*\);.*/\1/p' packaging/changelog)"
-[[ -n "$distribution" ]] || distribution="unstable"
 
 build_dir="$project_root/build/musl/build"
 stage="$project_root/build/musl/stage"
@@ -107,11 +111,11 @@ sed -e "s|@VERSION@|$version|" \
     LC_ALL=C sort -k2) > "$stage/DEBIAN/md5sums"
 
 echo "==> assemble the archive"
-out="$dist/${brand}-${version}-${distribution}-${arch}.deb"
+out="$dist/${brand}-${version}${platform:+-$platform}-${arch}.deb"
 rm -f "$out"
 dpkg-deb --root-owner-group --build "$stage" "$out" >/dev/null
 
-tar_out="$dist/${brand}-${version}-linux-${arch}-static.tar.gz"
+tar_out="$dist/${brand}-${version}${platform:+-$platform}-linux-${arch}-static.tar.gz"
 rm -f "$tar_out"
 tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
     -cf - -C "$stage" usr |
