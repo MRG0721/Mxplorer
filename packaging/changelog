@@ -1,5 +1,19 @@
 mxplorer (@VERSION@) unstable; urgency=low
 
+  * Re-release of 0.0.2 with no functional changes.
+  * Ship a fully static musl binary (static-pie): the package carries no
+    runtime library dependencies, so it installs on any dpkg-based system.
+  * Build the release inside a pinned Alpine 3.24.0 rootfs (GCC 15, musl 1.2)
+    entered with bubblewrap; the toolchain is cached under build/ and is never
+    installed on the host.
+  * Add a static tarball for systems without dpkg.
+  * Run ctest (core_operations, core_utils, cli_smoke) against the static
+    binaries before packaging.
+
+ -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  @DATE@
+
+mxplorer (0.0.2) unstable; urgency=low
+
   * Second alpha.
   * Close the documented functional gaps: copies write a temporary file and
     rename it into place, -p keeps permissions, timestamps, extended
@@ -14,7 +28,7 @@ mxplorer (@VERSION@) unstable; urgency=low
   * Add core unit tests and end-to-end regression coverage; ctest now runs
     core_operations, core_utils and cli_smoke.
 
- -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  @DATE@
+ -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  Wed, 07 Oct 2026 08:34:00 +0800
 
 mxplorer (0.0.1) unstable; urgency=low
 

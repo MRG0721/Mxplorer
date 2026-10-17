@@ -9,25 +9,30 @@
 其写作 Mxplorer，而命令名、包名、命名空间与头文件目录则是一律小写 `mxplorer`
 （类似 Git 与 `git`）。
 
-项目还在开发中，没有发布，也不做版本迭代；`build/`、`dist/` 这类产物随时可以删掉
+项目还在开发中，1.0 之前不做兼容性承诺；`build/`、`dist/` 这类产物随时可以删掉
 重新生成。
 
 ## 构建
 
-需要 CMake 3.20+、支持 C++20 的编译器（GCC 13+ / Clang 16+）。
+构建是全静态的。编译器放在一个固定版本的 Alpine 3.24.0 rootfs 里
+（GCC 15、musl 1.2），通过 bubblewrap 进入，缓存在 `build/musl/` 下，
+不会在宿主机上安装任何东西。宿主机只需要 `bubblewrap`、`curl`、`tar`、
+`sha256sum`、CMake（为了 `ctest`）、binutils（`readelf`、`objdump`）和 `file`。
+第一次运行需要联网下载 rootfs 与工具链包，之后使用缓存，可以离线构建。
+
+```sh
+./packaging/build_static.sh          # 构建、静态检查、ctest
+./build/musl/build/cli/mxplorer      # static-pie 二进制
+./packaging/build_static.sh --rebuild-toolchain   # 重建工具链缓存
+```
+
+二进制把 musl、libstdc++ 与 libgcc 一起装进自身，运行时没有任何动态库依赖。
+`ctest` 会在静态二进制上运行 `core_operations`、`core_utils` 与 `cli_smoke`。
+
 除标准库外只用到几个 POSIX 接口：core 用 `pwd.h`（取家目录）、`fnmatch.h`（检索的
 通配符匹配）、`sys/stat.h`（属性与时间戳）、`sys/xattr.h`（扩展属性与 ACL）以及少量
 POSIX I/O 调用（`open` / `read` / `write` / `lseek` / `ftruncate` / `utimensat`）；
 前端用 `unistd.h` / `sys/ioctl.h`（终端判断与宽度）和 `signal.h`。
-
-```sh
-cmake -S . -B build -G Ninja
-cmake --build build
-
-./build/cli/mxplorer                              # 交互式 shell
-./build/cli/mxplorer ls -l /tmp                   # 也可以只跑一条命令
-ctest --test-dir build --output-on-failure    # 冒烟测试
-```
 
 ## 目录结构
 
@@ -49,8 +54,9 @@ mxplorer/
 │   └── src/
 ├── cli/                      # 终端前端：解析命令行、打印结果、渲染进度
 │   └── src/{main,shell}.cpp
-├── packaging/                # deb 打包：man page、control 模板、打包脚本
-│   └── build_deb.sh
+├── packaging/                # 静态构建 + deb 打包
+│   ├── build_static.sh       # 固定 Alpine/musl 工具链、构建与 ctest
+│   └── build_deb.sh          # deb 与静态 tar.gz
 └── tests/                    # 三套测试，都由 ctest 驱动
     ├── smoke_test.sh         # 终端前端的端到端检查
     ├── core_operations_test.cpp  # core 的定点检查（复制原子性）
@@ -62,8 +68,8 @@ mxplorer/
 交互模式（提示符显示当前目录，`cd` 状态会保持）：
 
 ```
-$ ./build/cli/mxplorer
-mxplorer 0.0.2 | type 'help' for commands, 'exit' to quit
+$ ./build/musl/build/cli/mxplorer
+mxplorer 0.0.2-alpha.2 | type 'help' for commands, 'exit' to quit
 mxplorer:~$ cd mxplorer
 mxplorer:~/mxplorer$ ls
 ...
@@ -72,8 +78,8 @@ mxplorer:~/mxplorer$ ls
 非交互模式一次只执行一条命令，进程结束状态就是命令的结果（可直接用在脚本里）：
 
 ```sh
-./build/cli/mxplorer tree . -L 2
-./build/cli/mxplorer cp -r src backup/ && echo done
+./build/musl/build/cli/mxplorer tree . -L 2
+./build/musl/build/cli/mxplorer cp -r src backup/ && echo done
 ```
 
 | 命令 | 说明 |
@@ -97,17 +103,19 @@ mxplorer:~/mxplorer$ ls
 
 ```sh
 ./packaging/build_deb.sh
-# ==> dist/Mxplorer-0.0.2-unstable-amd64.deb
+# ==> dist/Mxplorer-0.0.2-alpha.2-unstable-amd64.deb
+# ==> dist/Mxplorer-0.0.2-alpha.2-linux-amd64-static.tar.gz
 
-sudo apt install ./dist/Mxplorer-0.0.2-unstable-amd64.deb
+sudo apt install ./dist/Mxplorer-0.0.2-alpha.2-unstable-amd64.deb
 mxplorer --version
 man mxplorer
 ```
 
-我的设备上没有装 debhelper，所以脚本不走 `dpkg-buildpackage`：它自己把安装树
-铺到 `build/package/` 里（`cmake --install` + `DESTDIR`），写好 control、
-md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
-`Depends` 仍然由 `dpkg-shlibdeps` 算出来，所以依赖串和 debhelper 的结果一致。
+`build_deb.sh` 会先调用 `build_static.sh`（所以测试一定会跑），复制并 strip
+二进制，把安装树铺在 `build/musl/stage/` 下，写好 control、md5sums、copyright、
+changelog，最后交给 `dpkg-deb --build` 成包。deb **刻意没有 `Depends` 字段**：
+二进制是全静态的，能装在任何 dpkg 系统上，与 glibc/libstdc++ 版本无关。
+tar.gz 是同一棵安装树，给不用 dpkg 的系统。
 
 包内容：
 
@@ -122,12 +130,14 @@ md5sums、copyright、changelog，最后交给 `dpkg-deb --build` 成包。
 - 维护者署名是 `MRG0721 <271227737+MRG0721@users.noreply.github.com>`：提交作者、
   Debian 包的 `Maintainer`、man page 的作者行都用这个身份。邮箱用的是 GitHub 提供的
   noreply 地址，提交能关联到账号，我不希望暴露真实邮箱。
-- 依赖是**在本机算出来**的（`libc6 (>= 2.38)`、`libgcc-s1 (>= 3.0)`、`libstdc++6 (>= 16)`，因为这里是
-  forky + GCC 16）。也就是说这个包只能装在不低于本机版本的系统上，Debian 13 或
-  Ubuntu 26.04 这些东西可能会因为 libstdc++ 太旧而装不上。要支持更老的目标系统，得用
-  debootstrap/容器在目标发行版里构建。
-- 暂时**不考虑**兼容性：我暂时是不考虑对于所有系统的兼容性的，正如上一条所言，"依赖
-  是在本机算出来的"。我现阶段毕竟还是开发初期，该项目目前本就是稚嫩的。
+- 发布工具链固定在 Alpine 3.24.0 minirootfs（校验 SHA256），缓存在
+  `build/musl/rootfs`。rootfs 里的软件包版本来自 Alpine 仓库，所以
+  `--rebuild-toolchain` 可能带上更新的 GCC/musl 修订版。
+- 静态 musl 有两条代价：`~user` 只能解析 `/etc/passwd` 里的用户（不再经过 NSS
+  查 LDAP/SSSD），而 `$HOME` 设置时优先用环境变量；另外 ASan/UBSan/valgrind
+  不再属于发布流程，验证依赖 `ctest` 与 `build_static.sh` 里的静态检查。
+- musl 或 libstdc++ 的安全修复只能通过重新发布二进制到达用户，因为库已经嵌入
+  可执行文件。
 
 之后想补的：`debian/` 正式源码包布局 + debhelper（这样 `dpkg-buildpackage`、
 `sbuild`、PPA 那套都能直接用），以及把 core 静态库和头文件拆一个 `-dev` 包。

@@ -3,24 +3,25 @@
 # Copyright (C) 2026 MRG0721
 
 #
-# Builds a .deb for the mxplorer terminal front-end.
+# Builds the static release artifacts.
 #
 #   ./packaging/build_deb.sh
 #
-# Output: dist/Mxplorer-<version>-<distribution>-<arch>.deb
+# Output:
+#   dist/Mxplorer-<version>-<distribution>-<arch>.deb
+#   dist/Mxplorer-<version>-linux-<arch>-static.tar.gz
 #
-# debhelper is not installed on this machine, so instead of running
-# dpkg-buildpackage this script stages the install tree itself, writes the
-# control files and lets dpkg-deb assemble the archive. The shared library
-# dependencies are still computed by dpkg-shlibdeps, so the Depends field ends
-# up the same as a debhelper build would produce.
+# The binary is produced by packaging/build_static.sh, which builds and tests a
+# static-pie binary inside a pinned Alpine rootfs. The deb deliberately has no
+# Depends field: the program carries musl and libstdc++ inside itself. The
+# tarball is for systems that do not use dpkg.
 
 set -euo pipefail
 
 # Keep the staged modes independent of the caller's umask.
 umask 022
 
-project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$project_root"
 
 maintainer="MRG0721 <271227737+MRG0721@users.noreply.github.com>"
@@ -30,99 +31,75 @@ maintainer="MRG0721 <271227737+MRG0721@users.noreply.github.com>"
 # "unstable" while the project is under development.
 brand="Mxplorer"
 
-die() {
+die()
+{
     echo "error: $*" >&2
     exit 1
 }
 
-for tool in cmake dpkg-deb dpkg; do
+for tool in dpkg-deb dpkg strip gzip md5sum tar; do
     command -v "$tool" >/dev/null 2>&1 || die "$tool is required to build the package"
 done
 
-# The project version in CMakeLists.txt is the single source of truth.
-version="$(sed -n 's/^[[:space:]]*VERSION[[:space:]]\{1,\}\([0-9][^[:space:]]*\).*/\1/p' CMakeLists.txt | head -1)"
-[[ -n "$version" ]] || die "cannot read the project version from CMakeLists.txt"
+# The feature version comes from project(VERSION); the release tag is the
+# second half of the version string. Both live in CMakeLists.txt.
+version_base="$(sed -n 's/^[[:space:]]*VERSION[[:space:]]\{1,\}\([0-9][^[:space:]]*\).*/\1/p' CMakeLists.txt |
+    head -1)"
+[[ -n "$version_base" ]] || die "cannot read the project version from CMakeLists.txt"
+
+release_tag="$(sed -n 's/^[[:space:]]*set(MXPLORER_RELEASE_TAG[[:space:]]*"\([^"]*\)".*/\1/p' CMakeLists.txt |
+    head -1)"
+version="$version_base"
+[[ -z "$release_tag" ]] || version="$version_base-$release_tag"
 
 arch="$(dpkg --print-architecture)"
+[[ "$arch" == "amd64" ]] ||
+    die "the pinned static toolchain currently targets amd64 only"
+
 distribution="$(sed -n '1s/.*) *\([^;]*\);.*/\1/p' packaging/changelog)"
 [[ -n "$distribution" ]] || distribution="unstable"
-work="build/package"
-stage="$work/mxplorer_${version}_${arch}"
-dist="dist"
 
-# Lets dpkg-shlibdeps do its job: it insists on finding debian/control and
-# debian/changelog next to the working directory.
-resolve_depends() {
-    local binary_path="$1"
+build_dir="$project_root/build/musl/build"
+stage="$project_root/build/musl/stage"
+dist="$project_root/dist"
 
-    if ! command -v dpkg-shlibdeps >/dev/null 2>&1; then
-        printf 'libc6, libstdc++6'
-        return 0
-    fi
+echo "==> build the static binary (this runs the test suites)"
+"$project_root/packaging/build_static.sh"
 
-    local sandbox="$work/depends"
-    rm -rf "$sandbox"
-    mkdir -p "$sandbox/debian"
+binary="$build_dir/cli/mxplorer"
+[[ -x "$binary" ]] || die "no binary at $binary"
 
-    sed -e "s|@MAINTAINER@|$maintainer|" \
-        packaging/debian-control.in > "$sandbox/debian/control"
-    sed -e "s|@VERSION@|$version|" \
-        -e "s|@DATE@|$(LC_ALL=C date -R)|" \
-        packaging/changelog > "$sandbox/debian/changelog"
+echo "==> stage the install tree"
+rm -rf "$stage"
+mkdir -p "$stage/usr/bin" "$stage/usr/share/man/man1" "$stage/usr/share/doc/mxplorer" "$dist"
 
-    # dpkg-shlibdeps runs from inside the sandbox, so the binary has to be
-    # named by absolute path.
-    local resolved
-    resolved="$(cd "$sandbox" && dpkg-shlibdeps -O -e"$binary_path" 2>/dev/null |
-        sed -n 's/^shlibs:Depends=//p')" || return 0
-    printf '%s' "$resolved"
-}
+install -m 0755 "$binary" "$stage/usr/bin/mxplorer"
+strip --strip-all "$stage/usr/bin/mxplorer"
 
-rm -rf "$work"
-mkdir -p "$dist"
-
-echo "==> configure and build (Release)"
-cmake -S . -B "$work/cmake" -G Ninja \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=/usr >/dev/null
-cmake --build "$work/cmake" >/dev/null
-
-echo "==> install into $stage"
-DESTDIR="$stage" cmake --install "$work/cmake" >/dev/null
-
-binary="$stage/usr/bin/mxplorer"
-binary_path="$(realpath "$stage/usr/bin/mxplorer")"
-[[ -x "$binary_path" ]] || die "no binary was installed to $binary"
-
-# The program and the package must not disagree about their version.
-binary_version="$("$binary_path" --version | awk '{print $2}')"
-[[ "$binary_version" == "$version" ]] ||
-    die "the binary reports $binary_version, the package would be $version"
-
-# Substitute the real version and compress: Debian ships man pages gzipped.
-sed -i "s|@VERSION@|$version|" "$stage/usr/share/man/man1/mxplorer.1"
-gzip -9 -n "$stage/usr/share/man/man1/mxplorer.1"
-
-echo "==> resolve shared library dependencies"
-depends="$(resolve_depends "$binary_path")" || depends=""
-[[ -n "$depends" ]] || depends="libc6, libstdc++6"
-
-installed_size="$(du -sk "$stage/usr" | cut -f1)"
-
-echo "==> write control files"
-mkdir -p "$stage/DEBIAN" "$stage/usr/share/doc/mxplorer"
-
-sed -e "s|@VERSION@|$version|" \
-    -e "s|@ARCH@|$arch|" \
-    -e "s|@DEPENDS@|$depends|" \
-    -e "s|@INSTALLED_SIZE@|$installed_size|" \
-    packaging/control.in > "$stage/DEBIAN/control"
+# Debian ships man pages gzipped; substitute the package version first.
+sed -e "s|@MXPLORER_VERSION_STRING@|$version|" packaging/mxplorer.1 |
+    gzip -9n > "$stage/usr/share/man/man1/mxplorer.1.gz"
 
 install -m 0644 packaging/copyright "$stage/usr/share/doc/mxplorer/copyright"
 sed -e "s|@VERSION@|$version|" \
     -e "s|@DATE@|$(LC_ALL=C date -R)|" \
     packaging/changelog |
-    gzip -9 -n -c > "$stage/usr/share/doc/mxplorer/changelog.gz"
+    gzip -9n > "$stage/usr/share/doc/mxplorer/changelog.gz"
+
+# The program and the package must not disagree about their version.
+binary_version="$("$stage/usr/bin/mxplorer" --version | awk '{print $2}')"
+[[ "$binary_version" == "$version" ]] ||
+    die "the binary reports $binary_version, the package would be $version"
+
+installed_size="$(du -sk "$stage/usr" | cut -f1)"
+
+echo "==> write control files"
+mkdir -p "$stage/DEBIAN"
+
+sed -e "s|@VERSION@|$version|" \
+    -e "s|@ARCH@|$arch|" \
+    -e "s|@INSTALLED_SIZE@|$installed_size|" \
+    packaging/control.in > "$stage/DEBIAN/control"
 
 # md5sums for everything outside /usr/share/doc, as policy asks for.
 (cd "$stage" &&
@@ -134,9 +111,16 @@ out="$dist/${brand}-${version}-${distribution}-${arch}.deb"
 rm -f "$out"
 dpkg-deb --root-owner-group --build "$stage" "$out" >/dev/null
 
+tar_out="$dist/${brand}-${version}-linux-${arch}-static.tar.gz"
+rm -f "$tar_out"
+tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+    -cf - -C "$stage" usr |
+    gzip -9n > "$tar_out"
+
 echo
 echo "package : $out"
 echo "size    : $(du -h "$out" | cut -f1)"
-echo "depends : $depends"
+echo "depends : none (static-pie, no shared libraries)"
+echo "tarball : $tar_out ($(du -h "$tar_out" | cut -f1))"
 echo "contents:"
 dpkg-deb --contents "$out" | awk '{ printf "  %s\n", $6 }'

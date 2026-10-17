@@ -7,7 +7,7 @@ add_executable(mxplorer_cli
 
 target_link_libraries(mxplorer_cli PRIVATE mxplorer_core)
 
-target_compile_definitions(mxplorer_cli PRIVATE MXPLORER_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(mxplorer_cli PRIVATE MXPLORER_VERSION="${MXPLORER_VERSION_STRING}")
 
 install(TARGETS mxplorer_cli RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 

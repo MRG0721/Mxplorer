@@ -11,28 +11,35 @@ combined with Explorer. It's written as Mxplorer, while the command name,
 package name, namespace, and header directory are all lowercase `mxplorer`
 (much like Git versus `git`).
 
-The project is still under development, hasn't been released, and doesn't do
-versioned iterations; artifacts like build/ and dist/ can be deleted and
-regenerated at any time.
+The project is still under development and makes no compatibility promises
+before 1.0; artifacts like `build/` and `dist/` can be deleted and regenerated
+at any time.
 
 ## Building
 
-Requires CMake 3.20+ and a compiler with C++20 support (GCC 13+ / Clang 16+).
+The build is fully static. The compiler lives in a pinned Alpine 3.24.0 rootfs
+(GCC 15, musl 1.2) that is entered with bubblewrap and cached under
+`build/musl/`, so nothing is installed on the host. The host needs
+`bubblewrap`, `curl`, `tar`, `sha256sum`, CMake (for `ctest`), binutils
+(`readelf`, `objdump`) and `file`. The first run downloads the rootfs and the
+toolchain packages; later runs use the cache and work offline.
+
+```sh
+./packaging/build_static.sh          # build, static checks, ctest
+./build/musl/build/cli/mxplorer      # static-pie binary
+./packaging/build_static.sh --rebuild-toolchain   # refresh the toolchain
+```
+
+The binary carries musl, libstdc++ and libgcc inside itself, so it has no
+runtime library dependencies. `ctest` runs `core_operations`, `core_utils` and
+`cli_smoke` against the static binaries.
+
 Besides the standard library, only a few POSIX interfaces are used:
 core uses `pwd.h` (the home directory), `fnmatch.h` (wildcard matching in
 search), `sys/stat.h` (attributes and timestamps), `sys/xattr.h` (extended
 attributes and ACLs) and a handful of POSIX I/O calls
 (`open` / `read` / `write` / `lseek` / `ftruncate` / `utimensat`); the frontend
 uses `unistd.h` / `sys/ioctl.h` (terminal detection and width) and `signal.h`.
-
-```sh
-cmake -S . -B build -G Ninja
-cmake --build build
-
-./build/cli/mxplorer                              # interactive shell
-./build/cli/mxplorer ls -l /tmp                   # or just run a single command
-ctest --test-dir build --output-on-failure    # smoke test
-```
 
 ## Project layout
 
@@ -54,8 +61,9 @@ mxplorer/
 │   └── src/
 ├── cli/                      # terminal frontend: parses the command line, prints results, renders progress
 │   └── src/{main,shell}.cpp
-├── packaging/                # deb packaging: man page, control template, packaging script
-│   └── build_deb.sh
+├── packaging/                # static build + deb packaging
+│   ├── build_static.sh       # pinned Alpine/musl toolchain, build and ctest
+│   └── build_deb.sh          # deb + static tarball
 └── tests/                    # all three suites are driven by ctest
     ├── smoke_test.sh         # end-to-end check of the terminal front-end
     ├── core_operations_test.cpp  # focused core checks (copy atomicity)
@@ -68,8 +76,8 @@ Interactive mode
 (the prompt shows the current directory, and `cd` state is preserved):
 
 ```
-$ ./build/cli/mxplorer
-mxplorer 0.0.2 | type 'help' for commands, 'exit' to quit
+$ ./build/musl/build/cli/mxplorer
+mxplorer 0.0.2-alpha.2 | type 'help' for commands, 'exit' to quit
 mxplorer:~$ cd mxplorer
 mxplorer:~/mxplorer$ ls
 ...
@@ -79,8 +87,8 @@ Non-interactive mode runs exactly one command and the process exit status is
 the command's result (so it can be used directly in scripts):
 
 ```sh
-./build/cli/mxplorer tree . -L 2
-./build/cli/mxplorer cp -r src backup/ && echo done
+./build/musl/build/cli/mxplorer tree . -L 2
+./build/musl/build/cli/mxplorer cp -r src backup/ && echo done
 ```
 
 | Command | Description |
@@ -104,19 +112,21 @@ Paths support `~`, `~user`, `~`/relative/path, `-`, as well as `'single quotes'`
 
 ```sh
 ./packaging/build_deb.sh
-# ==> dist/Mxplorer-0.0.2-unstable-amd64.deb
+# ==> dist/Mxplorer-0.0.2-alpha.2-unstable-amd64.deb
+# ==> dist/Mxplorer-0.0.2-alpha.2-linux-amd64-static.tar.gz
 
-sudo apt install ./dist/Mxplorer-0.0.2-unstable-amd64.deb
+sudo apt install ./dist/Mxplorer-0.0.2-alpha.2-unstable-amd64.deb
 mxplorer --version
 man mxplorer
 ```
 
-My machine doesn't have debhelper installed, so the script doesn't go through
-`dpkg-buildpackage`: it lays out the install tree itself under `build/package/`
-(`cmake --install` + `DESTDIR`), writes control, md5sums, copyright, and
-changelog, then hands it to `dpkg-deb --build` to produce the package.
-`Depends` is still computed by `dpkg-shlibdeps`, so the dependency string
-matches what debhelper would produce.
+`build_deb.sh` calls `build_static.sh` (so the test suites always run), strips
+a copy of the binary, and lays out the install tree under `build/musl/stage/`.
+It writes control, md5sums, copyright and changelog, then hands the tree to
+`dpkg-deb --build`. The deb deliberately has **no `Depends` field**: the
+binary is static, so it installs on any dpkg-based system regardless of the
+glibc or libstdc++ version. The tarball is the same tree for systems that do
+not use dpkg.
 
 Package contents:
 
@@ -133,16 +143,16 @@ Notes:
   package Maintainer, and the man page author line all use this identity.
   The email is the noreply address GitHub provides, so commits can be linked to
   the account, and I don't want to expose my real email.
-- Dependencies are **computed on this machine**
-(`libc6 (>= 2.38)`, `libgcc-s1 (>= 3.0)`, `libstdc++6 (>= 16)`, since this is forky + GCC 16).
-In other words, this package can only be installed on systems no older than
-this one; things like Debian 13 or Ubuntu 26.04 may fail to install
-because their libstdc++ is too old. To support older target systems, you'd
-need to build inside the target distro using debootstrap/a container.
-- For now I'm **not worrying about compatibility**:
-as I said in the previous point, "dependencies are computed on this machine."
-At this stage I'm still in early development, and the project itself is
-admittedly immature.
+- The release toolchain is pinned to the Alpine 3.24.0 minirootfs (SHA256
+  checked) and cached in `build/musl/rootfs`. Package versions inside that
+  rootfs come from Alpine's repository, so `--rebuild-toolchain` can pick up
+  newer GCC/musl point releases.
+- Static musl has two consequences: `~user` only resolves users found in
+  `/etc/passwd` (no LDAP/SSSD through NSS), while `$HOME` is preferred when it
+  is set; and ASan/UBSan/valgrind are no longer part of the release path.
+  Verification is `ctest` plus the static checks in `build_static.sh`.
+- Security fixes in musl or libstdc++ reach users only through a new binary
+  release, because those libraries are embedded in the executable.
 
 Things I want to add later:
 a proper `debian/` source-package layout + debhelper

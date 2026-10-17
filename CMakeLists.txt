@@ -8,6 +8,13 @@ project(Mxplorer
     DESCRIPTION "A small file manager with a terminal front-end (Qt6 front-end planned)"
     LANGUAGES CXX)
 
+# The feature version lives in project(VERSION) and only moves when new
+# features are added. The release tag changes for re-releases of the same
+# feature set (a new delivery format, a packaging fix, ...). Together they form
+# the version string reported by the binary and used by the package.
+set(MXPLORER_RELEASE_TAG "alpha.2")
+set(MXPLORER_VERSION_STRING "${PROJECT_VERSION}-${MXPLORER_RELEASE_TAG}")
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -35,7 +42,9 @@ add_subdirectory(core)
 
 if(MXPLORER_BUILD_CLI)
     add_subdirectory(cli)
-    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/mxplorer.1"
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/packaging/mxplorer.1"
+                   "${CMAKE_CURRENT_BINARY_DIR}/mxplorer.1" @ONLY)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/mxplorer.1"
             DESTINATION "${CMAKE_INSTALL_MANDIR}/man1")
 endif()
 

@@ -5,7 +5,6 @@ Maintainer: MRG0721 <271227737+MRG0721@users.noreply.github.com>
 Installed-Size: @INSTALLED_SIZE@
 Section: utils
 Priority: optional
-Depends: @DEPENDS@
 Description: terminal file manager with a UI independent core
  mxplorer is a small file manager for Linux. It ships a terminal front-end, an
  interactive shell plus a one-shot command mode, on top of a C++ core library
@@ -16,4 +15,6 @@ Description: terminal file manager with a UI independent core
  cancellation, so a Qt6 front-end can be added later without touching the file
  system logic.
  .
- This package contains the mxplorer command and its manual page.
+ This package contains the mxplorer command and its manual page. The binary is
+ linked statically against musl (static-pie) and has no runtime library
+ dependencies.
