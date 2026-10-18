@@ -69,7 +69,7 @@ mxplorer/
 
 ```
 $ ./build/musl/build/cli/mxplorer
-mxplorer 0.0.2-alpha.2 | type 'help' for commands, 'exit' to quit
+mxplorer 0.0.2-alpha.3 | type 'help' for commands, 'exit' to quit
 mxplorer:~$ cd mxplorer
 mxplorer:~/mxplorer$ ls
 ...
@@ -103,22 +103,24 @@ mxplorer:~/mxplorer$ ls
 
 ```sh
 ./packaging/build_deb.sh
-# ==> dist/Mxplorer-0.0.2-alpha.2-forky-amd64.deb
-# ==> dist/Mxplorer-0.0.2-alpha.2-forky-linux-amd64-static.tar.gz
+# ==> dist/Mxplorer-0.0.2-alpha.3-amd64.deb
+# ==> dist/Mxplorer-0.0.2-alpha.3-linux-amd64-static.tar.gz
 
-sudo apt install ./dist/Mxplorer-0.0.2-alpha.2-forky-amd64.deb
+sudo apt install ./dist/Mxplorer-0.0.2-alpha.3-amd64.deb
 mxplorer --version
 man mxplorer
 ```
 
-`forky` 是文件名里的构建平台标记，属于临时信息：手工完成兼容性验证后，把
-`packaging/build_deb.sh` 里的 `platform` 置空，文件名就变成
-`Mxplorer-<版本>-<架构>.deb` 与
-`Mxplorer-<版本>-linux-<架构>-static.tar.gz`。
+0.0.2-alpha.3 是 **Verified Compatibility Update**：全静态构建已在 Debian
+7.11、8.11、9.13、11.11、13.7 与 forky/sid（amd64）上验证。产物改用通用命名
+（临时的 `forky` 平台标记已去掉），deb 与静态 tar.gz 都作为 Release 附件发布。
+Debian 8 及以后用 `apt`/`apt-get` 安装；Debian 7 的旧 apt 不支持本地路径安装，
+用 `sudo dpkg -i ./Mxplorer-0.0.2-alpha.3-amd64.deb`；其他发行版使用静态 tar.gz。
 
 `build_deb.sh` 会先调用 `build_static.sh`（所以测试一定会跑），复制并 strip
 二进制，把安装树铺在 `build/musl/stage/` 下，写好 control、md5sums、copyright、
-changelog，最后交给 `dpkg-deb --build` 成包。deb **刻意没有 `Depends` 字段**：
+changelog，最后交给 `dpkg-deb --build` 成包。deb 用 gzip 压缩
+（`dpkg-deb -Zgzip`），以兼容 Debian 7 的旧 dpkg。deb **刻意没有 `Depends` 字段**：
 二进制是全静态的，能装在任何 dpkg 系统上，与 glibc/libstdc++ 版本无关。
 tar.gz 是同一棵安装树，给不用 dpkg 的系统。
 

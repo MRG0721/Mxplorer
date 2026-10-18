@@ -12,7 +12,7 @@ project(Mxplorer
 # features are added. The release tag changes for re-releases of the same
 # feature set (a new delivery format, a packaging fix, ...). Together they form
 # the version string reported by the binary and used by the package.
-set(MXPLORER_RELEASE_TAG "alpha.2")
+set(MXPLORER_RELEASE_TAG "alpha.3")
 set(MXPLORER_VERSION_STRING "${PROJECT_VERSION}-${MXPLORER_RELEASE_TAG}")
 
 set(CMAKE_CXX_STANDARD 20)

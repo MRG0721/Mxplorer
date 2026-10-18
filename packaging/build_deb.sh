@@ -11,9 +11,10 @@
 #   dist/Mxplorer-<version>-<platform>-<arch>.deb
 #   dist/Mxplorer-<version>-<platform>-linux-<arch>-static.tar.gz
 #
-# <platform> is a build-platform tag in the file name. It is "forky" until the
-# compatibility matrix has been verified by hand; set platform="" below to
-# drop it.
+# <platform> is an optional build-platform tag in the file name. It was
+# "forky" until the alpha.2 compatibility matrix was verified; from alpha.3
+# the tag is empty and the names are Mxplorer-<version>-<arch>.deb and
+# Mxplorer-<version>-linux-<arch>-static.tar.gz.
 #
 # The binary is produced by packaging/build_static.sh, which builds and tests a
 # static-pie binary inside a pinned Alpine rootfs. The deb deliberately has no
@@ -33,10 +34,10 @@ maintainer="MRG0721 <271227737+MRG0721@users.noreply.github.com>"
 # The artifact carries the brand spelling; the package itself stays lowercase.
 brand="Mxplorer"
 
-# Build-platform tag in the artifact names. It names the environment that
-# produced the package. Once compatibility has been verified by hand, set this
-# to an empty string so the deb becomes Mxplorer-<version>-<arch>.deb.
-platform="forky"
+# Optional build-platform tag in the artifact names. Empty since alpha.3
+# (Debian 7.11-13.7 amd64 validated). Set it only if a future release is
+# deliberately limited to one platform again.
+platform=""
 
 die()
 {
@@ -113,7 +114,10 @@ sed -e "s|@VERSION@|$version|" \
 echo "==> assemble the archive"
 out="$dist/${brand}-${version}${platform:+-$platform}-${arch}.deb"
 rm -f "$out"
-dpkg-deb --root-owner-group --build "$stage" "$out" >/dev/null
+# Debian 7's dpkg (1.16.x) cannot read xz-compressed members. gzip is the
+# format every dpkg release understands; the package grows a little, which is
+# the price of installing with apt on Wheezy as well.
+dpkg-deb --root-owner-group -Zgzip --build "$stage" "$out" >/dev/null
 
 tar_out="$dist/${brand}-${version}${platform:+-$platform}-linux-${arch}-static.tar.gz"
 rm -f "$tar_out"

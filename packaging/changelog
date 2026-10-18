@@ -1,5 +1,21 @@
 mxplorer (@VERSION@) unstable; urgency=low
 
+  * Verified Compatibility Update: compatibility-validated re-release of 0.0.2;
+    no functional changes.
+  * Validate the static binary on Debian 7.11, 8.11, 9.13, 11.11 and 13.7
+    plus forky/sid (amd64): it runs on all tested systems.
+  * Build the deb with gzip compression so old dpkg (1.16.x, Debian 7) can
+    read it; Debian 8 and newer install with apt/apt-get, Debian 7 installs
+    with dpkg -i, and the static tarball covers other distributions.
+  * Drop the forky platform tag: the artifacts are now
+    Mxplorer-<version>-<arch>.deb and
+    Mxplorer-<version>-linux-<arch>-static.tar.gz.
+  * Publish both the Debian package and the static tarball as release assets.
+
+ -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  @DATE@
+
+mxplorer (0.0.2-alpha.2) unstable; urgency=low
+
   * Re-release of 0.0.2 with no functional changes.
   * Ship a fully static musl binary (static-pie): the package carries no
     runtime library dependencies, so it installs on any dpkg-based system.
@@ -10,7 +26,7 @@ mxplorer (@VERSION@) unstable; urgency=low
   * Run ctest (core_operations, core_utils, cli_smoke) against the static
     binaries before packaging.
 
- -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  @DATE@
+ -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  Sat, 17 Oct 2026 12:00:47 +0800
 
 mxplorer (0.0.2) unstable; urgency=low
 
