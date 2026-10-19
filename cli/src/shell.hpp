@@ -50,6 +50,7 @@ private:
     void print_banner() const;
     void print_prompt() const;
     void print_help() const;
+    std::string prompt_text() const;
 
     int fail(const Error& error);
     int fail(const std::string& message);

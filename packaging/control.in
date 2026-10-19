@@ -7,8 +7,9 @@ Section: utils
 Priority: optional
 Description: terminal file manager with a UI independent core
  mxplorer is a small file manager for Linux. It ships a terminal front-end, an
- interactive shell plus a one-shot command mode, on top of a C++ core library
- that does the file system work and stays free of any UI toolkit.
+ interactive shell with line editing and Tab completion plus a one-shot command
+ mode, on top of a C++ core library that does the file system work and stays
+ free of any UI toolkit.
  .
  The core offers directory listing, stat, atomic copy, move, remove, mkdir,
  name and content search with size and age filters, progress callbacks and

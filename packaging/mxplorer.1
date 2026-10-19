@@ -1,7 +1,7 @@
 .\" SPDX-License-Identifier: GPL-3.0-or-later
 .\" Copyright (C) 2026 MRG0721
 
-.TH MXPLORER 1 "2026-10-18" "mxplorer @MXPLORER_VERSION_STRING@" "User Commands"
+.TH MXPLORER 1 "2026-10-19" "mxplorer @MXPLORER_VERSION_STRING@" "User Commands"
 .SH NAME
 mxplorer \- terminal file manager built on a UI independent core
 .SH SYNOPSIS
@@ -24,6 +24,18 @@ The special path
 refers to the previous directory.
 Arguments may be quoted with single or double quotes and backslash escapes
 are honoured outside single quotes.
+.PP
+In interactive mode, Tab completes command names, filesystem paths and short
+options.  Path completion expands
+.B ~
+and
+.BR ~user ,
+keeps directory separators and escapes spaces.  A directory candidate ends
+with
+.BR / ;
+pressing Tab again lists alternatives when the common prefix cannot be
+extended.  The line editor supports the left/right arrow keys, Home, End,
+Backspace, Delete, and the usual Ctrl-A/E/B/F/U/K/W/L editing keys.
 .SH COMMANDS
 .TP
 .BI ls " [\-a] [\-l] [path]"

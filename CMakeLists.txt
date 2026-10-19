@@ -4,7 +4,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(Mxplorer
-    VERSION 0.0.2
+    VERSION 0.0.3
     DESCRIPTION "A small file manager with a terminal front-end (Qt6 front-end planned)"
     LANGUAGES CXX)
 
@@ -12,7 +12,7 @@ project(Mxplorer
 # features are added. The release tag changes for re-releases of the same
 # feature set (a new delivery format, a packaging fix, ...). Together they form
 # the version string reported by the binary and used by the package.
-set(MXPLORER_RELEASE_TAG "alpha.3")
+set(MXPLORER_RELEASE_TAG "alpha.1")
 set(MXPLORER_VERSION_STRING "${PROJECT_VERSION}-${MXPLORER_RELEASE_TAG}")
 
 set(CMAKE_CXX_STANDARD 20)
@@ -71,6 +71,30 @@ if(BUILD_TESTING)
     add_test(NAME core_utils COMMAND mxplorer_core_utils_test)
 
     if(MXPLORER_BUILD_CLI)
+        add_executable(mxplorer_completion_test
+            tests/completion_test.cpp
+            cli/src/completion.cpp)
+        target_include_directories(mxplorer_completion_test PRIVATE cli/src)
+        target_link_libraries(mxplorer_completion_test PRIVATE mxplorer_core)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(mxplorer_completion_test PRIVATE -Wall -Wextra -Wpedantic)
+            if(MXPLORER_WARNINGS_AS_ERRORS)
+                target_compile_options(mxplorer_completion_test PRIVATE -Werror)
+            endif()
+        endif()
+        add_test(NAME cli_completion COMMAND mxplorer_completion_test)
+
+        add_executable(mxplorer_completion_pty_test tests/completion_pty_test.cpp)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(mxplorer_completion_pty_test PRIVATE -Wall -Wextra -Wpedantic)
+            if(MXPLORER_WARNINGS_AS_ERRORS)
+                target_compile_options(mxplorer_completion_pty_test PRIVATE -Werror)
+            endif()
+        endif()
+        add_test(
+            NAME cli_completion_pty
+            COMMAND mxplorer_completion_pty_test "$<TARGET_FILE:mxplorer_cli>")
+
         add_test(
             NAME cli_smoke
             COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/tests/smoke_test.sh"

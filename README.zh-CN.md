@@ -53,12 +53,14 @@ mxplorer/
 │   │   └── session.hpp       # 当前目录状态、把用户输入解析成绝对路径
 │   └── src/
 ├── cli/                      # 终端前端：解析命令行、打印结果、渲染进度
-│   └── src/{main,shell}.cpp
+│   └── src/{main,shell,completion,line_editor}.cpp
 ├── packaging/                # 静态构建 + deb 打包
 │   ├── build_static.sh       # 固定 Alpine/musl 工具链、构建与 ctest
 │   └── build_deb.sh          # deb 与静态 tar.gz
-└── tests/                    # 三套测试，都由 ctest 驱动
+└── tests/                    # 五套测试，都由 ctest 驱动
     ├── smoke_test.sh         # 终端前端的端到端检查
+    ├── completion_test.cpp   # 命令、路径与选项补全
+    ├── completion_pty_test.cpp # 通过伪终端测试真实 Tab 键
     ├── core_operations_test.cpp  # core 的定点检查（复制原子性）
     └── core_utils_test.cpp   # 纯函数检查：折叠、路径、排序、错误
 ```
@@ -69,7 +71,7 @@ mxplorer/
 
 ```
 $ ./build/musl/build/cli/mxplorer
-mxplorer 0.0.2-alpha.3 | type 'help' for commands, 'exit' to quit
+mxplorer 0.0.3-alpha.1 | type 'help' for commands, Tab completes, 'exit' to quit
 mxplorer:~$ cd mxplorer
 mxplorer:~/mxplorer$ ls
 ...
@@ -99,23 +101,30 @@ mxplorer:~/mxplorer$ ls
 路径支持 `~`、`~user`、`~`/相对路径、`-`，以及 `'单引号'`、`"双引号"`、反斜杠转义
 （`cd "my dir"` 可以正常工作）。
 
+交互提示符里，Tab 可以补全命令名、文件系统路径和短选项。路径补全会保留 `~`、
+目录分隔符并转义空格，所以 `cd my<Tab>` 会得到 `cd my\ dir/`。目录候选带尾斜杠；
+若公共前缀无法继续扩展，再按一次 Tab 会列出候选。行编辑器还支持左右方向键、
+Home/End、退格、Delete、Ctrl-A/E/B/F/U/K 与 Ctrl-W。目前没有持久化历史记录；
+通过管道或其他非终端方式输入时仍保持原来的逐行行为。
+
 ## 打包成 deb
 
 ```sh
 ./packaging/build_deb.sh
-# ==> dist/Mxplorer-0.0.2-alpha.3-amd64.deb
-# ==> dist/Mxplorer-0.0.2-alpha.3-linux-amd64-static.tar.gz
+# ==> dist/Mxplorer-0.0.3-alpha.1-amd64.deb
+# ==> dist/Mxplorer-0.0.3-alpha.1-linux-amd64-static.tar.gz
 
-sudo apt install ./dist/Mxplorer-0.0.2-alpha.3-amd64.deb
+sudo apt install ./dist/Mxplorer-0.0.3-alpha.1-amd64.deb
 mxplorer --version
 man mxplorer
 ```
 
-0.0.2-alpha.3 是 **Verified Compatibility Update**：全静态构建已在 Debian
-7.11、8.11、9.13、11.11、13.7 与 forky/sid（amd64）上验证。产物改用通用命名
-（临时的 `forky` 平台标记已去掉），deb 与静态 tar.gz 都作为 Release 附件发布。
-Debian 8 及以后用 `apt`/`apt-get` 安装；Debian 7 的旧 apt 不支持本地路径安装，
-用 `sudo dpkg -i ./Mxplorer-0.0.2-alpha.3-amd64.deb`；其他发行版使用静态 tar.gz。
+0.0.3-alpha.1 加入终端补全与行编辑，继续使用 0.0.2-alpha.3 已验证的全静态
+musl 构建和通用产物命名。Debian 8 及以后用 `apt`/`apt-get` 安装；Debian 7 的
+旧 apt 不支持本地路径安装，用
+`sudo dpkg -i ./Mxplorer-0.0.3-alpha.1-amd64.deb`；其他发行版使用静态 tar.gz。
+Debian 兼容性矩阵针对 0.0.2-alpha.3 验证；本次仅修改终端前端，尚未重新跑整套
+发行版矩阵。
 
 `build_deb.sh` 会先调用 `build_static.sh`（所以测试一定会跑），复制并 strip
 二进制，把安装树铺在 `build/musl/stage/` 下，写好 control、md5sums、copyright、
@@ -178,7 +187,8 @@ tar.gz 是同一棵安装树，给不用 dpkg 的系统。
 
 已实现：列目录（含自然序、目录优先）、详细信息、复制、移动、删除、建目录、
 目录树、按名字或内容检索（glob / 子串 / 正则，带类型、深度、大小与时间过滤，
-可一次搜多个起点）、进度显示、取消、错误分类，以及三套测试（shell 冒烟测试、
+可一次搜多个起点）、进度显示、取消、错误分类、交互式行编辑与命令/路径/短选项
+Tab 补全，以及五套测试（shell 冒烟测试、真实 PTY 补全测试、补全引擎检查、
 复制原子性的 core 测试、纯函数的单元检查）。Qt6 前端尚未实现，当前只有终端界面。
 
 几个需要知道的行为：
@@ -186,9 +196,10 @@ tar.gz 是同一棵安装树，给不用 dpkg 的系统。
 - 复制先写临时文件（目标目录下的 `.名字.mxplorer-partial.<pid>.<n>`），写完再
   `rename` 就位，所以被中断或失败的复制不会留下半成品目标文件，临时文件也会
   被清理。
-- Ctrl-C 能干净地取消正在进行的复制/检索。其它终止信号（SIGTERM、SIGKILL）
-  没有接管，因此可能留下隐藏的 `.mxplorer-partial` 文件——和普通 `cp` 被终止
-  后留下半成品目标文件是同一性质。
+- Ctrl-C 能干净地取消正在进行的复制/检索。复制等耗时操作期间的 SIGTERM、
+  SIGKILL 仍没有接管，因此可能留下隐藏的 `.mxplorer-partial` 文件——和普通
+  `cp` 被终止后留下半成品目标文件是同一性质。提示符上收到 SIGTERM、SIGHUP 或
+  SIGQUIT 时，行编辑器会先恢复终端再退出。
 - `-p` 保留权限位（含 setuid、setgid、sticky）、时间戳、扩展属性（ACL 以
   `system.posix_acl_*` 属性存储），以及同一棵树内文件之间的硬链接关系。
   属主不保留：那需要 root 权限。
@@ -206,7 +217,9 @@ tar.gz 是同一棵安装树，给不用 dpkg 的系统。
   locale 时退化为 ASCII 折叠。
 - 检索在 `collect_matches` 为假时通过 `SearchOptions::on_match` 流式输出，超大树
   也只占有限内存；想要结果数组的调用方可以保持默认收集。
-- 明确不做：保留属主、reflink/clone 优化、交互式行编辑/历史/补全、双横线长选项、
+- 补全在终端前端内用 POSIX 终端接口和 `list_directory()` 实现，不往 core 引入
+  readline/Qt 依赖。
+- 明确不做：保留属主、reflink/clone 优化、持久化命令历史、双横线长选项、
   复制管道/套接字/设备文件、单个超大目录的进度、回收站与撤销。
 
 ## 代码风格

@@ -1,5 +1,18 @@
 mxplorer (@VERSION@) unstable; urgency=low
 
+  * Third alpha: terminal Tab completion and basic line editing.
+  * Complete command names, filesystem paths and short options. Paths support
+    ~/~user, hidden entries, escaped spaces and trailing directory slashes.
+  * Add cursor movement, Home/End, Backspace/Delete and common Ctrl editing
+    keys without adding a readline or Qt dependency.
+  * Add completion-engine and real pseudo-terminal tests: five ctest suites,
+    232 checks in total.
+  * Keep the fully static musl build and the deferred Qt6 front-end unchanged.
+
+ -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  @DATE@
+
+mxplorer (0.0.2-alpha.3) unstable; urgency=low
+
   * Verified Compatibility Update: compatibility-validated re-release of 0.0.2;
     no functional changes.
   * Validate the static binary on Debian 7.11, 8.11, 9.13, 11.11 and 13.7
@@ -12,7 +25,7 @@ mxplorer (@VERSION@) unstable; urgency=low
     Mxplorer-<version>-linux-<arch>-static.tar.gz.
   * Publish both the Debian package and the static tarball as release assets.
 
- -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  @DATE@
+ -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  Sun, 18 Oct 2026 14:27:17 +0800
 
 mxplorer (0.0.2-alpha.2) unstable; urgency=low
 

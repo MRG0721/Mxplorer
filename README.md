@@ -60,12 +60,14 @@ mxplorer/
 │   │   └── session.hpp       # current-directory state, parses user input into absolute paths
 │   └── src/
 ├── cli/                      # terminal frontend: parses the command line, prints results, renders progress
-│   └── src/{main,shell}.cpp
+│   └── src/{main,shell,completion,line_editor}.cpp
 ├── packaging/                # static build + deb packaging
 │   ├── build_static.sh       # pinned Alpine/musl toolchain, build and ctest
 │   └── build_deb.sh          # deb + static tarball
-└── tests/                    # all three suites are driven by ctest
+└── tests/                    # all five suites are driven by ctest
     ├── smoke_test.sh         # end-to-end check of the terminal front-end
+    ├── completion_test.cpp   # command, path and option completion
+    ├── completion_pty_test.cpp # real Tab key through a pseudo-terminal
     ├── core_operations_test.cpp  # focused core checks (copy atomicity)
     └── core_utils_test.cpp   # pure helpers: folding, paths, ordering, errors
 ```
@@ -77,7 +79,7 @@ Interactive mode
 
 ```
 $ ./build/musl/build/cli/mxplorer
-mxplorer 0.0.2-alpha.3 | type 'help' for commands, 'exit' to quit
+mxplorer 0.0.3-alpha.1 | type 'help' for commands, Tab completes, 'exit' to quit
 mxplorer:~$ cd mxplorer
 mxplorer:~/mxplorer$ ls
 ...
@@ -108,25 +110,33 @@ the command's result (so it can be used directly in scripts):
 Paths support `~`, `~user`, `~`/relative/path, `-`, as well as `'single quotes'`,
 `"double quotes"`, and backslash escapes (`cd "my dir"` works fine).
 
+In the interactive prompt, Tab completes command names, filesystem paths and
+short options. Path completion follows `~`, keeps directory separators and
+escapes spaces, so `cd my<Tab>` becomes `cd my\ dir/`. Directories are shown
+with a trailing slash; a second Tab lists alternatives when the common prefix
+cannot be extended. The line editor also supports Left/Right, Home/End,
+Backspace, Delete, Ctrl-A/E/B/F/U/K and Ctrl-W. There is no persistent history
+yet; piped/non-terminal input keeps the old line-oriented behaviour.
+
 ## Packaging as a deb
 
 ```sh
 ./packaging/build_deb.sh
-# ==> dist/Mxplorer-0.0.2-alpha.3-amd64.deb
-# ==> dist/Mxplorer-0.0.2-alpha.3-linux-amd64-static.tar.gz
+# ==> dist/Mxplorer-0.0.3-alpha.1-amd64.deb
+# ==> dist/Mxplorer-0.0.3-alpha.1-linux-amd64-static.tar.gz
 
-sudo apt install ./dist/Mxplorer-0.0.2-alpha.3-amd64.deb
+sudo apt install ./dist/Mxplorer-0.0.3-alpha.1-amd64.deb
 mxplorer --version
 man mxplorer
 ```
 
-0.0.2-alpha.3 is the **Verified Compatibility Update**: the fully static build
-was validated on Debian 7.11, 8.11, 9.13, 11.11, 13.7 and forky/sid (amd64).
-The artifacts are generic (the temporary `forky` tag is gone), and both the
-deb and the static tarball are release assets. Debian 8 and newer install with
-`apt`/`apt-get`; Debian 7 uses
-`sudo dpkg -i ./Mxplorer-0.0.2-alpha.3-amd64.deb` because its old apt cannot
-install a local path. Other distributions use the static tarball.
+0.0.3-alpha.1 adds terminal completion and line editing. It keeps the fully
+static musl build and generic artifact names introduced by the verified
+0.0.2-alpha.3 build. Debian 8 and newer install with `apt`/`apt-get`; Debian 7
+uses `sudo dpkg -i ./Mxplorer-0.0.3-alpha.1-amd64.deb` because its old apt
+cannot install a local path. Other distributions use the static tarball.
+The Debian compatibility matrix was validated for 0.0.2-alpha.3; it has not
+been re-run for this CLI-only update.
 
 `build_deb.sh` calls `build_static.sh` (so the test suites always run), strips
 a copy of the binary, and lays out the install tree under `build/musl/stage/`.
@@ -210,8 +220,10 @@ Implemented: directory listing (with natural ordering, directories first),
 detailed info, copy, move, remove, mkdir, directory tree, search by name or
 content (glob / substring / regex, with type, depth, size and age filters,
 several roots at once), progress display, cancellation, error classification,
-and three test suites (a shell smoke test, core copy-atomicity checks and
-unit checks for the pure helpers).
+interactive line editing with Tab completion for commands, paths and short
+options, and five test suites (a shell smoke test, a real-PTY completion test,
+completion-engine checks, core copy-atomicity checks and unit checks for the
+pure helpers).
 The Qt6 front end does not exist yet; the terminal is the only interface.
 
 Behavior worth knowing about:
@@ -219,9 +231,11 @@ Behavior worth knowing about:
 - A copy writes a temporary file (`.name.mxplorer-partial.<pid>.<n>` next to
   the destination) and renames it into place, so an interrupted or failed copy
   never publishes a partial file, and the temporary file is cleaned up.
-- Ctrl-C cancels a running copy/search cleanly. Other termination signals
-  (SIGTERM, SIGKILL) are not handled, so a hidden `.mxplorer-partial` file can
-  survive them, just like an ordinary `cp` leaves a partial destination.
+- Ctrl-C cancels a running copy/search cleanly. SIGTERM and SIGKILL are still not
+  handled during file operations, so a hidden `.mxplorer-partial` file can
+  survive them, just like an ordinary `cp` leaves a partial destination. At the
+  prompt, the line editor restores the terminal before exiting on SIGTERM,
+  SIGHUP or SIGQUIT.
 - With `-p`, permission bits (setuid, setgid and the sticky bit included),
   timestamps, extended attributes (ACLs are stored as `system.posix_acl_*`
   attributes) and hard links between files copied in one tree are preserved.
@@ -247,10 +261,12 @@ Behavior worth knowing about:
 - Search results are streamed through `SearchOptions::on_match` when
   `collect_matches` is false, so a huge search uses bounded memory; a caller
   that wants the vector can keep the default.
+- Completion is implemented inside the terminal front-end using POSIX terminal
+  APIs and `list_directory()`; it does not add a readline/Qt dependency to core.
 - Still deliberately out of scope: ownership preservation, reflink/clone
-  optimization, interactive line editing/history/completion, long options,
-  copying FIFOs/sockets/device nodes, progress for a single huge directory,
-  and recycle bin/undo.
+  optimization, persistent command history, long options, copying
+  FIFOs/sockets/device nodes, progress for a single huge directory, and
+  recycle bin/undo.
 
 ## Code style
 

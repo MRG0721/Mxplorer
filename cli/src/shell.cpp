@@ -3,6 +3,8 @@
 
 #include "shell.hpp"
 
+#include "completion.hpp"
+#include "line_editor.hpp"
 #include "mxplorer/directory.hpp"
 #include "mxplorer/entry.hpp"
 #include "mxplorer/operations.hpp"
@@ -59,6 +61,12 @@ CancelToken interrupt_token()
 bool stdout_is_terminal()
 {
     static const bool value = ::isatty(STDOUT_FILENO) != 0;
+    return value;
+}
+
+bool stdin_is_terminal()
+{
+    static const bool value = ::isatty(STDIN_FILENO) != 0;
     return value;
 }
 
@@ -567,34 +575,79 @@ int Shell::run()
     print_banner();
 
     const auto previous_handler = std::signal(SIGINT, on_interrupt);
+    int exit_status = 0;
 
     std::string line;
-    while (running_)
+    if (stdin_is_terminal() && stdout_is_terminal())
     {
-        print_prompt();
-        if (!std::getline(std::cin, line))
+        while (running_)
         {
-            // Ctrl-C at the prompt clears the line instead of leaving the shell.
-            if (g_interrupted.exchange(false))
+            CompletionContext context;
+            context.cwd = session_.cwd();
+            context.home = session_.home();
+            for (const auto& [name, command] : commands_)
             {
-                std::cin.clear();
+                static_cast<void>(command);
+                context.commands.push_back(name);
+            }
+
+            const LineReadResult read = read_line(prompt_text(), context);
+            if (read.status == LineReadStatus::interrupted)
+            {
+                // Ctrl-C at the prompt clears the line instead of leaving the shell.
+                g_interrupted.store(false, std::memory_order_relaxed);
                 std::cout << '\n';
                 continue;
             }
-            std::cout << '\n';
-            break;
-        }
+            if (read.status == LineReadStatus::eof)
+            {
+                std::cout << '\n';
+                break;
+            }
+            if (read.status == LineReadStatus::terminated)
+            {
+                std::cout << '\n';
+                exit_status = 1;
+                break;
+            }
 
-        const std::vector<std::string> args = tokenize(line);
-        if (args.empty())
-        {
-            continue;
+            line = read.text;
+            const std::vector<std::string> args = tokenize(line);
+            if (args.empty())
+            {
+                continue;
+            }
+            run_command(args);
         }
-        run_command(args);
     }
+    else
+    {
+        while (running_)
+        {
+            print_prompt();
+            if (!std::getline(std::cin, line))
+            {
+                // Ctrl-C at the prompt clears the line instead of leaving the shell.
+                if (g_interrupted.exchange(false))
+                {
+                    std::cin.clear();
+                    std::cout << '\n';
+                    continue;
+                }
+                std::cout << '\n';
+                break;
+            }
 
+            const std::vector<std::string> args = tokenize(line);
+            if (args.empty())
+            {
+                continue;
+            }
+            run_command(args);
+        }
+    }
     std::signal(SIGINT, previous_handler);
-    return 0;
+    return exit_status;
 }
 
 int Shell::run_command(const std::vector<std::string>& args)
@@ -626,13 +679,19 @@ int Shell::run_command(const std::vector<std::string>& args)
 
 void Shell::print_banner() const
 {
-    std::cout << std::format("mxplorer {} | type 'help' for commands, 'exit' to quit\n", version());
+    std::cout << std::format(
+        "mxplorer {} | type 'help' for commands, Tab completes, 'exit' to quit\n", version());
 }
 
 void Shell::print_prompt() const
 {
-    std::cout << paint("mxplorer", kBoldBlue) << ':'
-              << paint(session_.pretty(session_.cwd()), kBoldGreen) << "$ " << std::flush;
+    std::cout << prompt_text() << std::flush;
+}
+
+std::string Shell::prompt_text() const
+{
+    return paint("mxplorer", kBoldBlue) + ':' + paint(session_.pretty(session_.cwd()), kBoldGreen) +
+           "$ ";
 }
 
 void Shell::print_help() const
@@ -652,7 +711,9 @@ void Shell::print_help() const
     }
     std::cout << "\nFlags: -a all (hidden files too), -l long format, -r recursive, "
                  "-f overwrite/ignore missing, -p keep permissions.\n"
-                 "find has its own options: run 'help find'.\n";
+                 "find has its own options: run 'help find'.\n"
+                 "Tab completes commands, paths and short options. "
+                 "Arrow keys, Home/End, Ctrl-A/E/U/K and Ctrl-W edit the line.\n";
 }
 
 int Shell::fail(const Error& error)
