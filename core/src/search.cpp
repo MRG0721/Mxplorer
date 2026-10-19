@@ -81,9 +81,14 @@ bool passes_filter(const FileEntry& entry, EntryFilter filter)
 /// only a small overlapping window is kept, so memory stays bounded no matter
 /// how large the file is. Binary contents are fine: nothing is decoded unless
 /// a case-insensitive comparison was asked for.
-Error file_contains(const fs::path& path, const std::string& text, bool case_sensitive, bool& found)
+Error file_contains(const fs::path& path, const std::string& text, bool case_sensitive,
+                    const CancelToken& is_cancelled, bool& found)
 {
     found = false;
+    if (is_cancelled && is_cancelled())
+    {
+        return Error(ErrorCode::cancelled, "operation cancelled", path);
+    }
 
     std::ifstream input(path, std::ios::binary);
     if (!input)
@@ -106,6 +111,10 @@ Error file_contains(const fs::path& path, const std::string& text, bool case_sen
     std::string window;
     while (true)
     {
+        if (is_cancelled && is_cancelled())
+        {
+            return Error(ErrorCode::cancelled, "operation cancelled", path);
+        }
         input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
         const std::streamsize read = input.gcount();
         if (read > 0)
@@ -353,10 +362,17 @@ Error walk_root(const fs::path& root, const SearchOptions& options, const NameMa
                 else
                 {
                     bool found = false;
-                    const Error error = file_contains(entry.path, options.content_pattern,
-                                                      options.case_sensitive, found);
+                    const Error error =
+                        file_contains(entry.path, options.content_pattern, options.case_sensitive,
+                                      options.is_cancelled, found);
                     if (!error.ok())
                     {
+                        if (error.code == ErrorCode::cancelled)
+                        {
+                            report.cancelled = true;
+                            stop = true;
+                            break;
+                        }
                         matched = false;
                         ++report.unreadable_entries;
                         record_problem(error);

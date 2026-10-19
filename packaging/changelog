@@ -5,8 +5,13 @@ mxplorer (@VERSION@) unstable; urgency=low
     ~/~user, hidden entries, escaped spaces and trailing directory slashes.
   * Add cursor movement, Home/End, Backspace/Delete and common Ctrl editing
     keys without adding a readline or Qt dependency.
-  * Add completion-engine and real pseudo-terminal tests: five ctest suites,
-    232 checks in total.
+  * Add completion-engine, real pseudo-terminal and search-cancellation tests:
+    six ctest suites and 247 checks in total.
+  * Build a new recursive-copy target under a hidden staging directory and
+    rename it only after the whole tree succeeds, so failed copies leave no
+    partial destination.
+  * Poll the cancel token during content-search chunks and report a directory
+    iteration error instead of returning a silently partial listing.
   * Keep the fully static musl build and the deferred Qt6 front-end unchanged.
 
  -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  @DATE@

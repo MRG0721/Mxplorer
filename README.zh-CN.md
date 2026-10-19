@@ -57,10 +57,11 @@ mxplorer/
 ├── packaging/                # 静态构建 + deb 打包
 │   ├── build_static.sh       # 固定 Alpine/musl 工具链、构建与 ctest
 │   └── build_deb.sh          # deb 与静态 tar.gz
-└── tests/                    # 五套测试，都由 ctest 驱动
+└── tests/                    # 六套测试，都由 ctest 驱动
     ├── smoke_test.sh         # 终端前端的端到端检查
     ├── completion_test.cpp   # 命令、路径与选项补全
     ├── completion_pty_test.cpp # 通过伪终端测试真实 Tab 键
+    ├── core_search_test.cpp  # 确定性的检索取消检查
     ├── core_operations_test.cpp  # core 的定点检查（复制原子性）
     └── core_utils_test.cpp   # 纯函数检查：折叠、路径、排序、错误
 ```
@@ -123,8 +124,7 @@ man mxplorer
 musl 构建和通用产物命名。Debian 8 及以后用 `apt`/`apt-get` 安装；Debian 7 的
 旧 apt 不支持本地路径安装，用
 `sudo dpkg -i ./Mxplorer-0.0.3-alpha.1-amd64.deb`；其他发行版使用静态 tar.gz。
-Debian 兼容性矩阵针对 0.0.2-alpha.3 验证；本次仅修改终端前端，尚未重新跑整套
-发行版矩阵。
+Debian 兼容性矩阵针对 0.0.2-alpha.3 验证；本次更新尚未重新跑整套发行版矩阵。
 
 `build_deb.sh` 会先调用 `build_static.sh`（所以测试一定会跑），复制并 strip
 二进制，把安装树铺在 `build/musl/stage/` 下，写好 control、md5sums、copyright、
@@ -188,8 +188,9 @@ tar.gz 是同一棵安装树，给不用 dpkg 的系统。
 已实现：列目录（含自然序、目录优先）、详细信息、复制、移动、删除、建目录、
 目录树、按名字或内容检索（glob / 子串 / 正则，带类型、深度、大小与时间过滤，
 可一次搜多个起点）、进度显示、取消、错误分类、交互式行编辑与命令/路径/短选项
-Tab 补全，以及五套测试（shell 冒烟测试、真实 PTY 补全测试、补全引擎检查、
-复制原子性的 core 测试、纯函数的单元检查）。Qt6 前端尚未实现，当前只有终端界面。
+Tab 补全，以及六套测试（shell 冒烟测试、真实 PTY 补全测试、补全引擎检查、
+复制原子性的 core 测试、检索取消检查、纯函数的单元检查）。Qt6 前端尚未实现，
+当前只有终端界面。
 
 几个需要知道的行为：
 
@@ -209,7 +210,8 @@ Tab 补全，以及五套测试（shell 冒烟测试、真实 PTY 补全测试�
   无符号字节序比较，折叠后相同的名字再按原始字节排序，所以顺序是全序且可复现。
 - 读不到属性的条目仍会列出（`ls -l` 显示 `?` 与未知字段）并给出警告，不再悄悄
   消失。整棵目录打不开仍是硬错误：`ls` 报 `Permission denied`，`tree` 打印
-  `[unreadable: ...]` 后继续，`cp -r` / `rm -r` 直接失败，不会产出不完整的副本。
+  `[unreadable: ...]` 后继续，`cp -r` / `rm -r` 直接失败。递归复制的新目标树先在
+  隐藏的临时目录中完整构建，成功后才原子改名；已存在目标目录的合并复制不是事务。
 - 把目录复制或移动进它自身会被拒绝，检查还覆盖用符号链接拼出来的目标写法
   （`link -> src` 时执行 `cp -r src link/inner`），递归复制不会失控地灌进源目录。
 - `~user` 与 `~user/路径` 会到 passwd 数据库里查；查不到的用户按普通名字处理。

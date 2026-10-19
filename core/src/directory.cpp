@@ -274,7 +274,7 @@ Result<std::vector<FileEntry>> list_directory(const std::filesystem::path& direc
         iterator.increment(ec);
         if (ec)
         {
-            break;
+            return error_from_std(ec, directory);
         }
     }
 

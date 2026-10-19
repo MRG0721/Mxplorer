@@ -64,10 +64,11 @@ mxplorer/
 ├── packaging/                # static build + deb packaging
 │   ├── build_static.sh       # pinned Alpine/musl toolchain, build and ctest
 │   └── build_deb.sh          # deb + static tarball
-└── tests/                    # all five suites are driven by ctest
+└── tests/                    # all six suites are driven by ctest
     ├── smoke_test.sh         # end-to-end check of the terminal front-end
     ├── completion_test.cpp   # command, path and option completion
     ├── completion_pty_test.cpp # real Tab key through a pseudo-terminal
+    ├── core_search_test.cpp  # deterministic search cancellation checks
     ├── core_operations_test.cpp  # focused core checks (copy atomicity)
     └── core_utils_test.cpp   # pure helpers: folding, paths, ordering, errors
 ```
@@ -136,7 +137,7 @@ static musl build and generic artifact names introduced by the verified
 uses `sudo dpkg -i ./Mxplorer-0.0.3-alpha.1-amd64.deb` because its old apt
 cannot install a local path. Other distributions use the static tarball.
 The Debian compatibility matrix was validated for 0.0.2-alpha.3; it has not
-been re-run for this CLI-only update.
+been re-run for this update.
 
 `build_deb.sh` calls `build_static.sh` (so the test suites always run), strips
 a copy of the binary, and lays out the install tree under `build/musl/stage/`.
@@ -221,9 +222,9 @@ detailed info, copy, move, remove, mkdir, directory tree, search by name or
 content (glob / substring / regex, with type, depth, size and age filters,
 several roots at once), progress display, cancellation, error classification,
 interactive line editing with Tab completion for commands, paths and short
-options, and five test suites (a shell smoke test, a real-PTY completion test,
-completion-engine checks, core copy-atomicity checks and unit checks for the
-pure helpers).
+options, and six test suites (a shell smoke test, a real-PTY completion test,
+completion-engine checks, core copy-atomicity checks, search-cancellation
+checks and unit checks for the pure helpers).
 The Qt6 front end does not exist yet; the terminal is the only interface.
 
 Behavior worth knowing about:
@@ -250,7 +251,10 @@ Behavior worth knowing about:
   metadata (`?` in `ls -l`) and a warning, instead of disappearing silently.
   An entire directory that cannot be opened stays a hard error: `ls` reports
   `Permission denied`, `tree` prints `[unreadable: ...]` and continues, and
-  `cp -r` / `rm -r` fail rather than producing an incomplete copy.
+- Recursive copies build a new destination tree under a hidden sibling
+  directory and rename it into place only after the whole tree succeeds.
+  `cp -r` / `rm -r` still fail on an unreadable directory. Merging into an
+  already-existing destination directory is not transactional.
 - Copying or moving a directory into itself is refused, and the check also
   covers symlinked spellings of the destination (`cp -r src link/inner` with
   `link -> src`), so a recursive copy cannot run away inside the source tree.

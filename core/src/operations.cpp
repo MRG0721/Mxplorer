@@ -178,6 +178,64 @@ private:
     fs::path path_;
 };
 
+/// Makes a copied tree removable even if some of its directories received a
+/// read-only mode before an error or a final rename failure.
+void make_tree_removable(const fs::path& path)
+{
+    std::error_code ec;
+    const auto status = fs::symlink_status(path, ec);
+    if (ec || !fs::is_directory(status))
+    {
+        return;
+    }
+
+    fs::permissions(path, fs::perms::owner_all, fs::perm_options::add, ec);
+    fs::directory_iterator iterator(path, fs::directory_options::skip_permission_denied, ec);
+    if (ec)
+    {
+        return;
+    }
+
+    const fs::directory_iterator end;
+    while (iterator != end)
+    {
+        make_tree_removable(iterator->path());
+        iterator.increment(ec);
+        if (ec)
+        {
+            return;
+        }
+    }
+}
+
+class TempDirectoryGuard
+{
+public:
+    explicit TempDirectoryGuard(fs::path path) : path_(std::move(path))
+    {
+    }
+    ~TempDirectoryGuard()
+    {
+        if (!path_.empty())
+        {
+            make_tree_removable(path_);
+            std::error_code ec;
+            fs::remove_all(path_, ec);
+        }
+    }
+
+    TempDirectoryGuard(const TempDirectoryGuard&) = delete;
+    TempDirectoryGuard& operator=(const TempDirectoryGuard&) = delete;
+
+    void release()
+    {
+        path_.clear();
+    }
+
+private:
+    fs::path path_;
+};
+
 /// Hard links are recreated instead of copying the data again: the key is the
 /// (device, inode) pair, the value is the first destination that holds it.
 struct CopyState
@@ -359,6 +417,32 @@ Error create_temp_file(const fs::path& destination, fs::path& temp_path, int& de
         }
     }
     return Error(ErrorCode::already_exists, "could not create a unique temporary file",
+                 destination);
+}
+
+/// Creates a sibling staging directory for an atomic whole-tree copy.
+Error create_temp_directory(const fs::path& destination, fs::path& temp_path)
+{
+    const fs::path directory = parent_or_dot(destination);
+    const std::string name = to_utf8(destination.filename());
+
+    for (int attempt = 0; attempt < 128; ++attempt)
+    {
+        const unsigned long counter = g_temp_counter.fetch_add(1);
+        const fs::path candidate =
+            directory / from_utf8(std::format(".{}.mxplorer-partial.{}.{}", name,
+                                              static_cast<long>(::getpid()), counter));
+        if (::mkdir(candidate.c_str(), 0777) == 0)
+        {
+            temp_path = candidate;
+            return Error{};
+        }
+        if (errno != EEXIST)
+        {
+            return error_from_errno(errno, destination);
+        }
+    }
+    return Error(ErrorCode::already_exists, "could not create a unique staging directory",
                  destination);
 }
 
@@ -919,6 +1003,36 @@ Error copy_to(const fs::path& source, const fs::path& destination, const Operati
     const OperationOptions& effective = options;
     ProgressReporter reporter(std::string(action), effective, scan_tree(source));
     CopyState state;
+
+    // A new directory target is built under a hidden sibling name and only
+    // renamed into place after the complete tree has been copied. This keeps
+    // failures from publishing a partial destination. Merging into an existing
+    // directory keeps normal cp(1)-style merge semantics.
+    if (fs::is_directory(source_status) && !entry_exists(destination))
+    {
+        fs::path staging;
+        if (const Error created = create_temp_directory(destination, staging); !created.ok())
+        {
+            return created;
+        }
+        TempDirectoryGuard cleanup(staging);
+
+        Error result = copy_entry(source, staging, effective, reporter, state);
+        if (!result.ok())
+        {
+            return result;
+        }
+
+        fs::rename(staging, destination, ec);
+        if (ec)
+        {
+            return error_from_std(ec, destination);
+        }
+        cleanup.release();
+        reporter.finish();
+        return Error{};
+    }
+
     Error result = copy_entry(source, destination, effective, reporter, state);
     if (result.ok())
     {

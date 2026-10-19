@@ -70,6 +70,16 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME core_utils COMMAND mxplorer_core_utils_test)
 
+    add_executable(mxplorer_core_search_test tests/core_search_test.cpp)
+    target_link_libraries(mxplorer_core_search_test PRIVATE mxplorer_core)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(mxplorer_core_search_test PRIVATE -Wall -Wextra -Wpedantic)
+        if(MXPLORER_WARNINGS_AS_ERRORS)
+            target_compile_options(mxplorer_core_search_test PRIVATE -Werror)
+        endif()
+    endif()
+    add_test(NAME core_search COMMAND mxplorer_core_search_test)
+
     if(MXPLORER_BUILD_CLI)
         add_executable(mxplorer_completion_test
             tests/completion_test.cpp

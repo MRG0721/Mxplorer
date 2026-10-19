@@ -64,6 +64,9 @@ sources are copied into the destination, like
 Symbolic links are recreated rather than followed.
 Copying writes a temporary file and renames it into place, so an interrupted
 copy never leaves a partial destination behind.
+For a directory target that does not exist yet, the whole tree is first built
+under a hidden sibling staging directory and renamed into place only after it
+succeeds.  Merging into an already existing directory is not transactional.
 With
 .B \-p
 permission bits (setuid, setgid and the sticky bit included), timestamps and

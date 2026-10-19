@@ -495,7 +495,22 @@ if [[ "$(id -u)" != "0" ]]; then
 
     # A recursive copy must fail instead of quietly copying a partial tree.
     expect_fail "$MXPLORER" cp -r "$WORK/locked" "$WORK/locked-copy"
+    [[ ! -e "$WORK/locked-copy" ]] ||
+        fail "a failed unreadable-directory copy left a destination behind"
+    ok
     expect_fail "$MXPLORER" rm -r "$WORK/locked"
+
+    # A failure after some children were copied must roll the whole new tree
+    # back, not publish the successfully copied prefix.
+    mkdir -p "$WORK/partial-src/readable" "$WORK/partial-src/locked"
+    echo "ok" >"$WORK/partial-src/readable/file.txt"
+    echo "secret" >"$WORK/partial-src/locked/file.txt"
+    chmod 000 "$WORK/partial-src/locked"
+    expect_fail "$MXPLORER" cp -r "$WORK/partial-src" "$WORK/partial-copy"
+    [[ ! -e "$WORK/partial-copy" ]] ||
+        fail "a partially copied tree left a destination behind"
+    ok
+    chmod 755 "$WORK/partial-src/locked"
 
     # A search reports the unreadable directory and keeps going...
     out="$("$MXPLORER" find '*' "$WORK" 2>&1)"

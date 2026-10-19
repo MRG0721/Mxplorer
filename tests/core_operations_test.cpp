@@ -146,6 +146,32 @@ int main()
                     "an interrupted copy must clean up its temporary file") &&
              passed;
 
+    // The same cancellation must remove the staging tree used for a new
+    // directory destination.
+    const fs::path tree_source = work / "tree-source";
+    fs::create_directories(tree_source, ec);
+    fs::copy_file(source, tree_source / "payload", ec);
+    passed = expect(!ec, "the directory-copy payload should be created") && passed;
+
+    seen_bytes = 0;
+    const fs::path tree_destination = work / "tree-destination";
+    mxplorer::OperationOptions tree_options;
+    tree_options.recursive = true;
+    tree_options.on_progress = [&seen_bytes](const mxplorer::OperationProgress& progress)
+    { seen_bytes = progress.bytes_done; };
+    tree_options.is_cancelled = [&seen_bytes] { return seen_bytes >= 8ULL * 1024 * 1024; };
+    const mxplorer::Error tree_cancelled =
+        mxplorer::copy_path(tree_source, tree_destination, tree_options);
+    passed = expect(tree_cancelled.code == mxplorer::ErrorCode::cancelled,
+                    "an interrupted directory copy must report cancelled") &&
+             passed;
+    passed = expect(!fs::exists(tree_destination),
+                    "an interrupted directory copy must not publish a destination") &&
+             passed;
+    passed = expect(temporary_files(work).empty(),
+                    "an interrupted directory copy must clean up its staging tree") &&
+             passed;
+
     // A successful copy still works, is complete, and leaves no litter.
     options = {};
     const fs::path complete = work / "complete";
