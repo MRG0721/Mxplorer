@@ -27,7 +27,10 @@
 ```
 
 二进制把 musl、libstdc++ 与 libgcc 一起装进自身，运行时没有任何动态库依赖。
-`ctest` 会在静态二进制上运行 `core_operations`、`core_utils` 与 `cli_smoke`。
+`ctest` 会在静态二进制上运行 `core_operations`、`core_utils`、`core_search`、
+`cli_completion`、`cli_completion_pty` 与 `cli_smoke`。完整的
+[0.0.3-alpha.1 测试报告](docs/testing/v0.0.3-alpha.1/2026-10-19-v0.0.3-alpha.1-comprehensive-test-report.md)
+位于 `docs/testing/`。
 
 除标准库外只用到几个 POSIX 接口：core 用 `pwd.h`（取家目录）、`fnmatch.h`（检索的
 通配符匹配）、`sys/stat.h`（属性与时间戳）、`sys/xattr.h`（扩展属性与 ACL）以及少量
@@ -114,16 +117,18 @@ Home/End、退格、Delete、Ctrl-A/E/B/F/U/K 与 Ctrl-W。目前没有持久化
 ./packaging/build_deb.sh
 # ==> dist/Mxplorer-0.0.3-alpha.1-amd64.deb
 # ==> dist/Mxplorer-0.0.3-alpha.1-linux-amd64-static.tar.gz
-
-sudo apt install ./dist/Mxplorer-0.0.3-alpha.1-amd64.deb
-mxplorer --version
-man mxplorer
 ```
 
-0.0.3-alpha.1 加入终端补全与行编辑，继续使用 0.0.2-alpha.3 已验证的全静态
-musl 构建和通用产物命名。Debian 8 及以后用 `apt`/`apt-get` 安装；Debian 7 的
-旧 apt 不支持本地路径安装，用
-`sudo dpkg -i ./Mxplorer-0.0.3-alpha.1-amd64.deb`；其他发行版使用静态 tar.gz。
+| 系统 | 安装方式 |
+| --- | --- |
+| Debian 8+ | `sudo apt-get install ./dist/Mxplorer-0.0.3-alpha.1-amd64.deb` |
+| Debian 7.11（旧 apt） | `sudo dpkg -i ./dist/Mxplorer-0.0.3-alpha.1-amd64.deb` |
+| 其他发行版 | 解包 `Mxplorer-0.0.3-alpha.1-linux-amd64-static.tar.gz`，运行 `usr/bin/mxplorer` |
+
+0.0.3-alpha.1 加入终端补全与行编辑，已
+[作为 GitHub pre-release 发布](https://github.com/MRG0721/Mxplorer/releases/tag/v0.0.3-alpha.1)，
+继续使用 0.0.2-alpha.3 已验证的全静态 musl 构建和通用产物命名。Debian 7 的旧 apt
+不支持本地路径安装，因此使用 `dpkg -i`。
 Debian 兼容性矩阵针对 0.0.2-alpha.3 验证；本次更新尚未重新跑整套发行版矩阵。
 
 `build_deb.sh` 会先调用 `build_static.sh`（所以测试一定会跑），复制并 strip

@@ -31,8 +31,10 @@ toolchain packages; later runs use the cache and work offline.
 ```
 
 The binary carries musl, libstdc++ and libgcc inside itself, so it has no
-runtime library dependencies. `ctest` runs `core_operations`, `core_utils` and
-`cli_smoke` against the static binaries.
+runtime library dependencies. `ctest` runs `core_operations`, `core_utils`,
+`core_search`, `cli_completion`, `cli_completion_pty` and `cli_smoke` against
+the static binaries. The full [0.0.3-alpha.1 test report](docs/testing/v0.0.3-alpha.1/2026-10-19-v0.0.3-alpha.1-comprehensive-test-report.md)
+is in `docs/testing/`.
 
 Besides the standard library, only a few POSIX interfaces are used:
 core uses `pwd.h` (the home directory), `fnmatch.h` (wildcard matching in
@@ -125,17 +127,19 @@ yet; piped/non-terminal input keeps the old line-oriented behaviour.
 ./packaging/build_deb.sh
 # ==> dist/Mxplorer-0.0.3-alpha.1-amd64.deb
 # ==> dist/Mxplorer-0.0.3-alpha.1-linux-amd64-static.tar.gz
-
-sudo apt install ./dist/Mxplorer-0.0.3-alpha.1-amd64.deb
-mxplorer --version
-man mxplorer
 ```
 
-0.0.3-alpha.1 adds terminal completion and line editing. It keeps the fully
-static musl build and generic artifact names introduced by the verified
-0.0.2-alpha.3 build. Debian 8 and newer install with `apt`/`apt-get`; Debian 7
-uses `sudo dpkg -i ./Mxplorer-0.0.3-alpha.1-amd64.deb` because its old apt
-cannot install a local path. Other distributions use the static tarball.
+| System | Installation |
+| --- | --- |
+| Debian 8+ | `sudo apt-get install ./dist/Mxplorer-0.0.3-alpha.1-amd64.deb` |
+| Debian 7.11 (old apt) | `sudo dpkg -i ./dist/Mxplorer-0.0.3-alpha.1-amd64.deb` |
+| Other distributions | extract `Mxplorer-0.0.3-alpha.1-linux-amd64-static.tar.gz` and run `usr/bin/mxplorer` |
+
+0.0.3-alpha.1 adds terminal completion and line editing. It is
+[published as a GitHub pre-release](https://github.com/MRG0721/Mxplorer/releases/tag/v0.0.3-alpha.1)
+and keeps the fully static musl build and generic artifact names introduced by
+the verified 0.0.2-alpha.3 build. Debian 7 uses `dpkg -i` because its old apt
+cannot install a local path.
 The Debian compatibility matrix was validated for 0.0.2-alpha.3; it has not
 been re-run for this update.
 
@@ -251,6 +255,7 @@ Behavior worth knowing about:
   metadata (`?` in `ls -l`) and a warning, instead of disappearing silently.
   An entire directory that cannot be opened stays a hard error: `ls` reports
   `Permission denied`, `tree` prints `[unreadable: ...]` and continues, and
+  `cp -r` / `rm -r` fail instead of treating it as empty.
 - Recursive copies build a new destination tree under a hidden sibling
   directory and rename it into place only after the whole tree succeeds.
   `cp -r` / `rm -r` still fail on an unreadable directory. Merging into an
