@@ -1,5 +1,16 @@
 mxplorer (@VERSION@) unstable; urgency=low
 
+  * Verified Compatibility Update: compatibility-validated re-release of the
+    0.0.3 feature set; no functional changes.
+  * Validate the 0.0.3-alpha.1 build on Debian 7.11, 8.11, 9.13, 11.11, 13.7
+    and forky/sid (amd64); all tested systems pass.
+  * Publish the queued compatibility result as version 0.0.3-alpha.2 with the
+    same static-pie package and tarball layout.
+
+ -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  @DATE@
+
+mxplorer (0.0.3-alpha.1) unstable; urgency=low
+
   * Third alpha: terminal Tab completion and basic line editing.
   * Complete command names, filesystem paths and short options. Paths support
     ~/~user, hidden entries, escaped spaces and trailing directory slashes.
@@ -14,7 +25,7 @@ mxplorer (@VERSION@) unstable; urgency=low
     iteration error instead of returning a silently partial listing.
   * Keep the fully static musl build and the deferred Qt6 front-end unchanged.
 
- -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  @DATE@
+ -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  Mon, 19 Oct 2026 23:47:45 +0800
 
 mxplorer (0.0.2-alpha.3) unstable; urgency=low
 
