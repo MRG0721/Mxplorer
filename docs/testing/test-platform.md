@@ -11,7 +11,7 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 平台代称 | Debain 7.11 |
+| 平台代称 | Debian 7.11 |
 | OS | Debian GNU/Linux 7.11 (Wheezy), 64-bit (amd64) |
 | kernel | Linux 3.2.0-4-amd64 (Debian package version 3.2.78-1), x86_64 |
 | CPU | 2个逻辑处理器 |
