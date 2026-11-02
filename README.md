@@ -33,8 +33,9 @@ toolchain packages; later runs use the cache and work offline.
 The binary carries musl, libstdc++ and libgcc inside itself, so it has no
 runtime library dependencies. `ctest` runs `core_operations`, `core_utils`,
 `core_search`, `cli_completion`, `cli_completion_pty` and `cli_smoke` against
-the static binaries. The full [0.0.3-alpha.1 test report](docs/testing/v0.0.3-alpha.1/2026-10-19-v0.0.3-alpha.1-comprehensive-test-report.md)
-is in `docs/testing/`.
+the static binaries. Testing records are in `docs/testing/`, including the
+[0.0.3-alpha.2 compatibility report](docs/testing/v0.0.3-alpha.2/2026-10-20-compatibility-test-report.md)
+and [platform details](docs/testing/test-platform.md).
 
 Besides the standard library, only a few POSIX interfaces are used:
 core uses `pwd.h` (the home directory), `fnmatch.h` (wildcard matching in
@@ -82,7 +83,7 @@ Interactive mode
 
 ```
 $ ./build/musl/build/cli/mxplorer
-mxplorer 0.0.3-alpha.1 | type 'help' for commands, Tab completes, 'exit' to quit
+mxplorer 0.0.3-alpha.2 | type 'help' for commands, Tab completes, 'exit' to quit
 mxplorer:~$ cd mxplorer
 mxplorer:~/mxplorer$ ls
 ...
@@ -125,23 +126,22 @@ yet; piped/non-terminal input keeps the old line-oriented behaviour.
 
 ```sh
 ./packaging/build_deb.sh
-# ==> dist/Mxplorer-0.0.3-alpha.1-amd64.deb
-# ==> dist/Mxplorer-0.0.3-alpha.1-linux-amd64-static.tar.gz
+# ==> dist/Mxplorer-0.0.3-alpha.2-amd64.deb
+# ==> dist/Mxplorer-0.0.3-alpha.2-linux-amd64-static.tar.gz
 ```
 
 | System | Installation |
 | --- | --- |
-| Debian 8+ | `sudo apt-get install ./dist/Mxplorer-0.0.3-alpha.1-amd64.deb` |
-| Debian 7.11 (old apt) | `sudo dpkg -i ./dist/Mxplorer-0.0.3-alpha.1-amd64.deb` |
-| Other distributions | extract `Mxplorer-0.0.3-alpha.1-linux-amd64-static.tar.gz` and run `usr/bin/mxplorer` |
+| Debian 8+ | `sudo apt-get install ./dist/Mxplorer-0.0.3-alpha.2-amd64.deb` |
+| Debian 7.11 (old apt) | `sudo dpkg -i ./dist/Mxplorer-0.0.3-alpha.2-amd64.deb` |
+| Other distributions | extract `Mxplorer-0.0.3-alpha.2-linux-amd64-static.tar.gz` and run `usr/bin/mxplorer` |
 
-0.0.3-alpha.1 adds terminal completion and line editing. It is
-[published as a GitHub pre-release](https://github.com/MRG0721/Mxplorer/releases/tag/v0.0.3-alpha.1)
-and keeps the fully static musl build and generic artifact names introduced by
-the verified 0.0.2-alpha.3 build. Debian 7 uses `dpkg -i` because its old apt
-cannot install a local path.
-The Debian compatibility matrix was validated for 0.0.2-alpha.3; it has not
-been re-run for this update.
+0.0.3-alpha.2 is the compatibility-validated re-release of the 0.0.3 feature
+set. It keeps the fully static musl build, generic artifact names and terminal
+completion from alpha.1, with no functional changes. Debian 7 uses `dpkg -i`
+because its old apt cannot install a local path. The Debian 7.11-13.7 and
+forky/sid amd64 compatibility matrix is recorded in the
+[compatibility report](docs/testing/v0.0.3-alpha.2/2026-10-20-compatibility-test-report.md).
 
 `build_deb.sh` calls `build_static.sh` (so the test suites always run), strips
 a copy of the binary, and lays out the install tree under `build/musl/stage/`.
