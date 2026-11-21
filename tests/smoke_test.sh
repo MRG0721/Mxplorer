@@ -79,6 +79,19 @@ ok
 out="$("$MXPLORER" ls -a .)"
 contains "$out" ".hidden/"
 
+out="$("$MXPLORER" ls --all --long .)"
+contains "$out" ".hidden/"
+contains "$out" "-rw"
+
+# "--" stops option parsing, so names that begin with dashes remain usable.
+echo "dash" >"--all"
+out="$("$MXPLORER" stat -- --all)"
+contains "$out" "--all"
+mkdir -- --dash-dir
+out="$("$MXPLORER" ls -- --dash-dir)"
+contains "$out" "(empty)"
+rm --recursive -- --dash-dir
+
 # Natural ordering: file2.txt must come before file10.txt.
 out="$("$MXPLORER" ls -l .)"
 contains "$out" "-rw"
@@ -116,6 +129,10 @@ expect_ok "$MXPLORER" cp -r alpha beta
 [[ -f beta/one.txt ]] || fail "cp -r should copy the tree"
 ok
 
+expect_ok "$MXPLORER" cp --recursive --force --preserve alpha beta-long
+[[ -f beta-long/one.txt ]] || fail "cp long options should copy the tree"
+ok
+
 expect_ok "$MXPLORER" cp link link2
 [[ -L link2 ]] || fail "cp should recreate symlinks instead of following them"
 ok
@@ -141,6 +158,10 @@ expect_ok "$MXPLORER" mkdir -p deep/nested/dir
 [[ -d deep/nested/dir ]] || fail "mkdir -p should create parents"
 ok
 
+expect_ok "$MXPLORER" mkdir --parents long/nested/dir
+[[ -d long/nested/dir ]] || fail "mkdir --parents should create parents"
+ok
+
 out="$("$MXPLORER" mkdir -p deep)"
 [[ -z "$out" ]] || fail "mkdir -p on an existing directory should be silent"
 ok
@@ -155,6 +176,10 @@ ok
 
 expect_ok "$MXPLORER" rm -r deep
 [[ ! -d deep ]] || fail "rm -r should remove the tree"
+ok
+
+expect_ok "$MXPLORER" rm --recursive --force long beta-long
+[[ ! -d long && ! -d beta-long ]] || fail "rm long options should remove the trees"
 ok
 
 expect_ok "$MXPLORER" rm -r beta
@@ -289,6 +314,10 @@ out="$("$MXPLORER" tree .)"
 contains "$out" "directories,"
 contains "$out" "one.txt"
 
+out="$("$MXPLORER" tree --level 1 .)"
+contains "$out" "directories,"
+contains "$out" "alpha/"
+
 out="$("$MXPLORER" tree file2.txt)"
 contains "$out" "0 directories, 1 file"
 
@@ -308,6 +337,9 @@ contains "$out" "mkdir"
 out="$("$MXPLORER" help mv)"
 contains "$out" "[-p]"
 
+out="$("$MXPLORER" cp --help)"
+contains "$out" "--recursive"
+
 # ------------------------------------------------------------------- find ----
 mkdir -p "$WORK/search/notes/deep"
 echo "report" >"$WORK/search/report.txt"
@@ -325,6 +357,13 @@ contains "$out" "report-2026.txt"
 # A glob without wildcards means "contains this text".
 out="$("$MXPLORER" find report "$WORK/search" 2>/dev/null)"
 [[ "$(lines_of "$out")" == "3" ]] || fail "implicit substring search returned: $out"
+ok
+
+out="$("$MXPLORER" find --literal --ignore-case mixed.txt "$WORK/search" 2>/dev/null)"
+contains "$out" "MiXeD.TXT"
+
+out="$("$MXPLORER" find --regex '^report.*\.txt$' "$WORK/search" 2>/dev/null)"
+[[ "$(lines_of "$out")" == "2" ]] || fail "long regex search returned: $out"
 ok
 
 out="$("$MXPLORER" find -F '*.txt' "$WORK/search" 2>/dev/null)"
@@ -354,6 +393,10 @@ out="$("$MXPLORER" find '*.txt' -d2 "$WORK/search" 2>/dev/null)"
 [[ "$(lines_of "$out")" == "2" ]] || fail "-d 2 should reach one level deeper: $out"
 ok
 
+out="$("$MXPLORER" find '*' "$WORK/search" --type=d --depth=1 --long 2>/dev/null)"
+[[ "$(lines_of "$out")" == "1" ]] || fail "--type=d --depth=1 returned: $out"
+ok
+
 out="$("$MXPLORER" find '*' -t d "$WORK/search" 2>/dev/null)"
 [[ "$(lines_of "$out")" == "2" ]] || fail "-t d should list the two directories: $out"
 ok
@@ -376,7 +419,7 @@ out="$("$MXPLORER" search '*.md' "$WORK/search" 2>/dev/null)"
 contains "$out" "other.md"
 
 out="$("$MXPLORER" help find)"
-contains "$out" "-n <count>"
+contains "$out" "--limit <count>"
 
 expect_fail "$MXPLORER" find -E 'a(' "$WORK/search"
 expect_fail "$MXPLORER" find 'x' "$WORK/no-such-directory"
@@ -404,6 +447,9 @@ ok
 out="$("$MXPLORER" find '*' "$WORK/content" -c NEEDLE -i 2>/dev/null)"
 contains "$out" "note.txt"
 
+out="$("$MXPLORER" find '*' "$WORK/content" --content=needle --ignore-case 2>/dev/null)"
+contains "$out" "note.txt"
+
 # Size and modification-time filters.
 out="$("$MXPLORER" find '*' "$WORK/content" -t f -s +1K 2>/dev/null)"
 [[ "$(lines_of "$out")" == "1" ]] || fail "-s +1K should only match the big file: $out"
@@ -413,12 +459,25 @@ if [[ "$out" == *"big.dat"* ]]; then
     fail "-s -1K must not match the big file: $out"
 fi
 ok
+out="$("$MXPLORER" find '*' "$WORK/content" --type f --size -1K 2>/dev/null)"
+if [[ "$out" == *"big.dat"* ]]; then
+    fail "--size -1K must consume the signed value and not match the big file: $out"
+fi
+ok
 out="$("$MXPLORER" find '*' "$WORK/content" -t f -m +7d 2>/dev/null)"
 [[ "$(lines_of "$out")" == "1" ]] || fail "-m +7d should only match the old file: $out"
+contains "$out" "old.txt"
+out="$("$MXPLORER" find '*' "$WORK/content" --type f --modified +7d 2>/dev/null)"
+[[ "$(lines_of "$out")" == "1" ]] || fail "--modified +7d should only match the old file: $out"
 contains "$out" "old.txt"
 out="$("$MXPLORER" find '*' "$WORK/content" -t f -m -7d 2>/dev/null)"
 if [[ "$out" == *"old.txt"* ]]; then
     fail "-m -7d must not match the old file: $out"
+fi
+ok
+out="$("$MXPLORER" find '*' "$WORK/content" --type f --modified -7d 2>/dev/null)"
+if [[ "$out" == *"old.txt"* ]]; then
+    fail "--modified -7d must consume the signed value: $out"
 fi
 ok
 
@@ -446,6 +505,10 @@ expect_fail "$MXPLORER" find '*' "$WORK/content" -s 10
 expect_fail "$MXPLORER" find '*' "$WORK/content" -m 7d
 expect_fail "$MXPLORER" find '*' "$WORK/content" -s +10Q
 expect_fail "$MXPLORER" find '*' "$WORK/content" -m +7x
+expect_fail "$MXPLORER" find '*' "$WORK/content" --size +10Q
+expect_fail "$MXPLORER" find '*' "$WORK/content" --modified +7x
+expect_fail "$MXPLORER" find '*' "$WORK/content" --type
+expect_fail "$MXPLORER" tree --level
 # A depth that does not fit an int must be rejected, not silently truncated
 # (4294967297 used to wrap to 1 and quietly mean "direct children only").
 expect_fail "$MXPLORER" find '*' "$WORK/content" -d 4294967297
@@ -454,7 +517,14 @@ expect_fail "$MXPLORER" find '*' "$WORK/content" -n 9223372036854775808
 # ------------------------------------------------------------- reporting ----
 expect_fail "$MXPLORER" cd /definitely/not/here
 expect_fail "$MXPLORER" ls -z .
+expect_fail "$MXPLORER" ls --not-an-option .
+expect_fail "$MXPLORER" ls --all=yes .
 expect_fail "$MXPLORER" definitely-not-a-command
+
+out="$("$MXPLORER" ls --not-an-option . 2>&1 | head -1)" || true
+[[ "$out" == "error: ls: unknown option --not-an-option" ]] ||
+    fail "unexpected long option error: [$out]"
+ok
 
 # ~user expands through the passwd database; an unknown user stays literal.
 if getent passwd root >/dev/null 2>&1; then

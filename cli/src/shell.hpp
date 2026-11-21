@@ -54,7 +54,7 @@ private:
 
     int fail(const Error& error);
     int fail(const std::string& message);
-    int usage_error(const std::string& command, const std::vector<char>& unknown_flags);
+    int usage_error(const std::string& command, const std::vector<std::string>& unknown_options);
 
     int cmd_help(const Args& args);
     int cmd_ls(const Args& args);

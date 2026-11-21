@@ -13,8 +13,8 @@
 # therefore needs network access. Later runs use the cache and work offline.
 #
 # Output: build/musl/build/cli/mxplorer (static-pie) plus the static test
-# binaries. ctest runs core_operations, core_utils and cli_smoke against those
-# binaries before the script returns.
+# binaries. ctest runs all six registered suites against those binaries before
+# the script returns.
 
 set -euo pipefail
 

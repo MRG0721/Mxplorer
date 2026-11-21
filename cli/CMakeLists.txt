@@ -5,6 +5,7 @@ add_executable(mxplorer_cli
     src/main.cpp
     src/shell.cpp
     src/completion.cpp
+    src/options.cpp
     src/line_editor.cpp)
 
 target_link_libraries(mxplorer_cli PRIVATE mxplorer_core)

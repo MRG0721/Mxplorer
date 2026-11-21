@@ -3,13 +3,13 @@
 
 #include "completion.hpp"
 
+#include "options.hpp"
 #include "mxplorer/directory.hpp"
 #include "mxplorer/entry.hpp"
 #include "mxplorer/path_utils.hpp"
 
 #include <algorithm>
 #include <cctype>
-#include <map>
 #include <system_error>
 
 namespace mxplorer::cli
@@ -163,20 +163,15 @@ std::vector<Token> scan_tokens(std::string_view line)
     return tokens;
 }
 
-const std::map<std::string, std::vector<std::string>>& option_table()
+std::vector<std::string> option_candidates(std::string_view command)
 {
-    static const std::map<std::string, std::vector<std::string>> table = {
-        {"ls", {"-a", "-l"}},
-        {"ll", {"-a", "-l"}},
-        {"cp", {"-r", "-f", "-p"}},
-        {"mv", {"-f", "-p"}},
-        {"rm", {"-r", "-f"}},
-        {"mkdir", {"-p"}},
-        {"tree", {"-L"}},
-        {"find", {"-i", "-E", "-F", "-l", "-a", "-t", "-d", "-n", "-c", "-s", "-m"}},
-        {"search", {"-i", "-E", "-F", "-l", "-a", "-t", "-d", "-n", "-c", "-s", "-m"}},
-    };
-    return table;
+    std::vector<std::string> candidates;
+    for (const OptionSpec& spec : option_specs(command))
+    {
+        candidates.push_back(std::string{"-"} + spec.short_name);
+        candidates.push_back("--" + std::string(spec.long_name));
+    }
+    return candidates;
 }
 
 bool starts_with(std::string_view value, std::string_view prefix)
@@ -387,6 +382,11 @@ CompletionResult complete_line(std::string_view line, std::size_t cursor,
         return complete_values(token.begin, token.end, token.logical, commands);
     }
 
+    if (token_number == 1 && !token.logical.empty() && token.logical.front() == '-')
+    {
+        return complete_values(token.begin, token.end, token.logical, {"--help", "--version"});
+    }
+
     if (command == "help" && token_number == 2)
     {
         return complete_values(token.begin, token.end, token.logical, commands);
@@ -394,27 +394,32 @@ CompletionResult complete_line(std::string_view line, std::size_t cursor,
 
     if (token_number > 1 && !token.logical.empty() && token.logical.front() == '-')
     {
-        const auto found = option_table().find(command);
-        if (found != option_table().end())
+        std::vector<std::string> candidates = option_candidates(command);
+        if (token.logical.rfind("--", 0) != 0)
         {
-            return complete_values(token.begin, token.end, token.logical, found->second);
+            std::erase_if(candidates, [](const std::string& candidate)
+                          { return candidate.rfind("--", 0) == 0; });
         }
+        return complete_values(token.begin, token.end, token.logical, candidates);
     }
 
     if (token_number > 2)
     {
         const std::string& previous = tokens[token_number - 2].logical;
-        if ((command == "find" || command == "search") && previous == "-t")
+        if ((command == "find" || command == "search") &&
+            (previous == "-t" || previous == "--type"))
         {
             return complete_values(token.begin, token.end, token.logical, {"f", "d", "l"});
         }
         if ((command == "find" || command == "search") &&
-            (previous == "-d" || previous == "-n" || previous == "-c" || previous == "-s" ||
-             previous == "-m"))
+            (previous == "-d" || previous == "--depth" || previous == "-n" ||
+             previous == "--limit" || previous == "-c" || previous == "--content" ||
+             previous == "-s" || previous == "--size" || previous == "-m" ||
+             previous == "--modified"))
         {
             return make_result(token.begin, token.end, token.logical, {}, {});
         }
-        if (command == "tree" && previous == "-L")
+        if (command == "tree" && (previous == "-L" || previous == "--level"))
         {
             return make_result(token.begin, token.end, token.logical, {}, {});
         }

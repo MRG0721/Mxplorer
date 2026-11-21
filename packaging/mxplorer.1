@@ -1,7 +1,7 @@
 .\" SPDX-License-Identifier: GPL-3.0-or-later
 .\" Copyright (C) 2026 MRG0721
 
-.TH MXPLORER 1 "2026-11-03" "mxplorer @MXPLORER_VERSION_STRING@" "User Commands"
+.TH MXPLORER 1 "2026-11-21" "mxplorer @MXPLORER_VERSION_STRING@" "User Commands"
 .SH NAME
 mxplorer \- terminal file manager built on a UI independent core
 .SH SYNOPSIS
@@ -26,7 +26,7 @@ Arguments may be quoted with single or double quotes and backslash escapes
 are honoured outside single quotes.
 .PP
 In interactive mode, Tab completes command names, filesystem paths and short
-options.  Path completion expands
+or long options.  Path completion expands
 .B ~
 and
 .BR ~user ,
@@ -36,6 +36,28 @@ with
 pressing Tab again lists alternatives when the common prefix cannot be
 extended.  The line editor supports the left/right arrow keys, Home, End,
 Backspace, Delete, and the usual Ctrl-A/E/B/F/U/K/W/L editing keys.
+.PP
+Every short option has an exact double-dash long form.  Boolean examples are
+.BR \-\-all ,
+.BR \-\-long ,
+.BR \-\-recursive ,
+.BR \-\-force ,
+.BR \-\-preserve
+and
+.BR \-\-parents .
+Options that take a value accept both
+.B \-\-name value
+and
+.BR \-\-name=value ;
+for example,
+.B tree \-\-level 2
+and
+.BR "find --depth=1" .
+A standalone
+.B \-\-
+stops option parsing, so paths whose names begin with a dash remain usable.
+.B command \-\-help
+shows the command-specific usage and option list.
 .SH COMMANDS
 .TP
 .BI ls " [\-a] [\-l] [path]"
@@ -136,64 +158,74 @@ Clear the screen.
 Leave the shell.
 .SH OPTIONS
 .TP
-.B \-a
+.B \-a, \-\-all
 Include hidden entries (names starting with a dot).
 .TP
-.B \-l
+.B \-l, \-\-long
 Long listing: permissions, size, modification time.
 .TP
-.B \-r
+.B \-r, \-\-recursive
 Recurse into directories.
 .TP
-.B \-f
+.B \-f, \-\-force
 Overwrite existing destinations, and ignore paths that do not exist when
 removing.
 .TP
-.B \-p
+.B \-p, \-\-preserve
 Keep permissions, timestamps, extended attributes (including ACLs) and hard
 links between the copied files.
 .TP
-.BR \-i " (find)"
+.B \-p, \-\-parents
+Create missing parent directories.
+.TP
+.B \-i, \-\-ignore-case
 Ignore case while searching.
 .TP
-.BR \-E " (find)"
+.B \-E, \-\-regex
 Treat the pattern as an ECMAScript regular expression.
 .TP
-.BR \-F " (find)"
+.B \-F, \-\-literal
 Treat the pattern as plain text, matched as a substring.
 .TP
-.BR \-t " f|d|l (find)"
+.B \-t, \-\-type " f|d|l"
 Only regular files, only directories, or only symbolic links.
 .TP
-.BI \-d " depth (find)"
+.B \-d, \-\-depth " depth"
 Do not descend deeper than
 .I depth
 levels; 1 means the direct children of the starting point.
 .TP
-.BI \-n " count (find)"
+.B \-n, \-\-limit " count"
 Stop after
 .I count
 matches.
 .TP
-.BI \-c " text (find)"
+.B \-c, \-\-content " text"
 Only match regular files whose contents contain
 .IR text .
 .TP
-.BR \-s " +N[KMG] (find)"
+.B \-s, \-\-size " +N[KMG]"
 Only match entries larger than
 .I N
 bytes;
-.B \-s \-N[KMG]
+.B \-\-size \-N[KMG]
 matches entries smaller than
 .IR N .
 The unit letters are 1024-based.
 .TP
-.BR \-m " +N[dhms] (find)"
+.B \-m, \-\-modified " +N[dhms]"
 Only match entries modified longer ago than
 .IR N ;
-.B \-m \-N[dhms]
+.B \-\-modified \-N[dhms]
 matches entries modified more recently than
 .IR N .
+.TP
+.B \-L, \-\-level " depth"
+Limit the
+.B tree
+command to
+.I depth
+levels below the starting point.
 .TP
 .BR \-h ", " \-\-help
 Show the command list.

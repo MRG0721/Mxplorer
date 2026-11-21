@@ -83,7 +83,7 @@ Interactive mode
 
 ```
 $ ./build/musl/build/cli/mxplorer
-mxplorer 0.0.3-alpha.2 | type 'help' for commands, Tab completes, 'exit' to quit
+mxplorer 0.0.4-alpha.1 | type 'help' for commands, Tab completes, 'exit' to quit
 mxplorer:~$ cd mxplorer
 mxplorer:~/mxplorer$ ls
 ...
@@ -111,11 +111,20 @@ the command's result (so it can be used directly in scripts):
 | `find <pattern> [path...] [options]` / `search` | Search by name or content, printing absolute paths one per line; `-i` ignore case, `-E` regex, `-F` literal, `-l` long format, `-a` include hidden, `-t f\|d\|l` type, `-d N` depth, `-n N` limit, `-c text` content, `-s ±N[KMG]` size, `-m ±N[dhms]` age |
 | `help` / `clear` / `exit` / `quit` | — |
 
+Every short option has an exact long alias. Boolean examples include
+`ls --all --long`, `cp --recursive --force --preserve`,
+`rm --recursive --force`, `mkdir --parents` and `find --ignore-case --type d`.
+Value options accept both `--name value` and `--name=value`, for example
+`tree --level 2`, `find --depth=1`, `find --size -10M` and
+`find --content needle`. A standalone `--` stops option parsing, so paths
+whose names start with `-` remain usable. Tab completion covers both short
+and long option names.
+
 Paths support `~`, `~user`, `~`/relative/path, `-`, as well as `'single quotes'`,
 `"double quotes"`, and backslash escapes (`cd "my dir"` works fine).
 
 In the interactive prompt, Tab completes command names, filesystem paths and
-short options. Path completion follows `~`, keeps directory separators and
+short or long options. Path completion follows `~`, keeps directory separators and
 escapes spaces, so `cd my<Tab>` becomes `cd my\ dir/`. Directories are shown
 with a trailing slash; a second Tab lists alternatives when the common prefix
 cannot be extended. The line editor also supports Left/Right, Home/End,
@@ -126,21 +135,20 @@ yet; piped/non-terminal input keeps the old line-oriented behaviour.
 
 ```sh
 ./packaging/build_deb.sh
-# ==> dist/Mxplorer-0.0.3-alpha.2-amd64.deb
-# ==> dist/Mxplorer-0.0.3-alpha.2-linux-amd64-static.tar.gz
+# ==> dist/Mxplorer-0.0.4-alpha.1-amd64.deb
+# ==> dist/Mxplorer-0.0.4-alpha.1-linux-amd64-static.tar.gz
 ```
 
 | System | Installation |
 | --- | --- |
-| Debian 8+ | `sudo apt-get install ./dist/Mxplorer-0.0.3-alpha.2-amd64.deb` |
-| Debian 7.11 (old apt) | `sudo dpkg -i ./dist/Mxplorer-0.0.3-alpha.2-amd64.deb` |
-| Other distributions | extract `Mxplorer-0.0.3-alpha.2-linux-amd64-static.tar.gz` and run `usr/bin/mxplorer` |
+| Debian 8+ | `sudo apt-get install ./dist/Mxplorer-0.0.4-alpha.1-amd64.deb` |
+| Debian 7.11 (old apt) | `sudo dpkg -i ./dist/Mxplorer-0.0.4-alpha.1-amd64.deb` |
+| Other distributions | extract `Mxplorer-0.0.4-alpha.1-linux-amd64-static.tar.gz` and run `usr/bin/mxplorer` |
 
-0.0.3-alpha.2 is the compatibility-validated re-release of the 0.0.3 feature
-set. It keeps the fully static musl build, generic artifact names and terminal
-completion from alpha.1, with no functional changes. Debian 7 uses `dpkg -i`
-because its old apt cannot install a local path. The Debian 7.11-13.7 and
-forky/sid amd64 compatibility matrix is recorded in the
+0.0.4-alpha.1 adds precise double-dash long options, long-option Tab
+completion, `--name=value` syntax and the `--` option terminator. The latest
+fully verified release is still 0.0.3-alpha.2; the Debian 7.11-13.7 and
+forky/sid amd64 compatibility matrix for that baseline is recorded in the
 [compatibility report](docs/testing/v0.0.3-alpha.2/2026-10-20-compatibility-test-report.md).
 
 `build_deb.sh` calls `build_static.sh` (so the test suites always run), strips
@@ -225,9 +233,9 @@ Implemented: directory listing (with natural ordering, directories first),
 detailed info, copy, move, remove, mkdir, directory tree, search by name or
 content (glob / substring / regex, with type, depth, size and age filters,
 several roots at once), progress display, cancellation, error classification,
-interactive line editing with Tab completion for commands, paths and short
-options, and six test suites (a shell smoke test, a real-PTY completion test,
-completion-engine checks, core copy-atomicity checks, search-cancellation
+interactive line editing with Tab completion for commands, paths and short or
+long options, and six test suites (a shell smoke test, a real-PTY completion
+test, completion-engine checks, core copy-atomicity checks, search-cancellation
 checks and unit checks for the pure helpers).
 The Qt6 front end does not exist yet; the terminal is the only interface.
 
@@ -273,8 +281,8 @@ Behavior worth knowing about:
 - Completion is implemented inside the terminal front-end using POSIX terminal
   APIs and `list_directory()`; it does not add a readline/Qt dependency to core.
 - Still deliberately out of scope: ownership preservation, reflink/clone
-  optimization, persistent command history, long options, copying
-  FIFOs/sockets/device nodes, progress for a single huge directory, and
+  optimization, persistent command history, copying FIFOs/sockets/device
+  nodes, progress for a single huge directory, and
   recycle bin/undo.
 
 ## Code style

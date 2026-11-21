@@ -115,14 +115,32 @@ int main()
     result = complete(context, "ls -");
     expect_candidates(result, {"-a", "-l"}, "short options should be completed");
 
+    result = complete(context, "ls --");
+    expect_candidates(result, {"--all", "--long"}, "long options should be completed");
+
+    result = complete(context, "find --i");
+    expect_candidates(result, {"--ignore-case"}, "long prefixes should be completed");
+
     result = complete(context, "find x -t ");
     expect_candidates(result, {"f", "d", "l"}, "find -t should complete its values");
+
+    result = complete(context, "find x --type ");
+    expect_candidates(result, {"f", "d", "l"}, "find --type should complete its values");
 
     result = complete(context, "find x -c ");
     expect(result.candidates.empty(), "find -c should not offer path suggestions");
 
+    result = complete(context, "find x --content ");
+    expect(result.candidates.empty(), "find --content should not offer path suggestions");
+
     result = complete(context, "tree -L ");
     expect(result.candidates.empty(), "tree -L should not offer path suggestions");
+
+    result = complete(context, "tree --level ");
+    expect(result.candidates.empty(), "tree --level should not offer path suggestions");
+
+    result = complete(context, "--he");
+    expect_candidates(result, {"--help"}, "global long options should be completed");
 
     result = complete(context, "ls -a");
     expect_candidates(result, {"-a"}, "an exact option should remain selectable");

@@ -1,5 +1,16 @@
 mxplorer (@VERSION@) unstable; urgency=low
 
+  * Add precise double-dash long options for every existing short option.
+  * Complete short and long option names at the interactive prompt.
+  * Accept --name=value and --name value for options that take a value.
+  * Add the standard -- option terminator for paths beginning with a dash.
+  * Add long-option command help via COMMAND --help.
+  * Extend completion and smoke tests; six ctest suites now pass 280 checks.
+
+ -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  @DATE@
+
+mxplorer (0.0.3-alpha.2) unstable; urgency=low
+
   * Verified Compatibility Update: compatibility-validated re-release of the
     0.0.3 feature set; no functional changes.
   * Validate the 0.0.3-alpha.1 build on Debian 7.11, 8.11, 9.13, 11.11, 13.7

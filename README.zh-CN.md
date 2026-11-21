@@ -76,7 +76,7 @@ mxplorer/
 
 ```
 $ ./build/musl/build/cli/mxplorer
-mxplorer 0.0.3-alpha.2 | type 'help' for commands, Tab completes, 'exit' to quit
+mxplorer 0.0.4-alpha.1 | type 'help' for commands, Tab completes, 'exit' to quit
 mxplorer:~$ cd mxplorer
 mxplorer:~/mxplorer$ ls
 ...
@@ -103,10 +103,18 @@ mxplorer:~/mxplorer$ ls
 | `find <pattern> [path...] [选项]` / `search` | 按名字或内容检索，结果逐行打印绝对路径；`-i` 忽略大小写、`-E` 正则、`-F` 字面、`-l` 长格式、`-a` 含隐藏、`-t f\|d\|l` 类型、`-d N` 深度、`-n N` 上限、`-c text` 内容、`-s ±N[KMG]` 大小、`-m ±N[dhms]` 时间 |
 | `help` / `clear` / `exit` / `quit` | — |
 
+每个短选项都有完全对应的长选项。布尔选项示例包括
+`ls --all --long`、`cp --recursive --force --preserve`、
+`rm --recursive --force`、`mkdir --parents` 和 `find --ignore-case --type d`。
+值选项同时支持 `--name value` 与 `--name=value`，例如
+`tree --level 2`、`find --depth=1`、`find --size -10M` 与
+`find --content needle`。单独的 `--` 会终止选项解析，因此以 `-` 开头的路径
+仍可使用。Tab 补全同时覆盖短选项和长选项。
+
 路径支持 `~`、`~user`、`~`/相对路径、`-`，以及 `'单引号'`、`"双引号"`、反斜杠转义
 （`cd "my dir"` 可以正常工作）。
 
-交互提示符里，Tab 可以补全命令名、文件系统路径和短选项。路径补全会保留 `~`、
+交互提示符里，Tab 可以补全命令名、文件系统路径和短/长选项。路径补全会保留 `~`、
 目录分隔符并转义空格，所以 `cd my<Tab>` 会得到 `cd my\ dir/`。目录候选带尾斜杠；
 若公共前缀无法继续扩展，再按一次 Tab 会列出候选。行编辑器还支持左右方向键、
 Home/End、退格、Delete、Ctrl-A/E/B/F/U/K 与 Ctrl-W。目前没有持久化历史记录；
@@ -116,20 +124,19 @@ Home/End、退格、Delete、Ctrl-A/E/B/F/U/K 与 Ctrl-W。目前没有持久化
 
 ```sh
 ./packaging/build_deb.sh
-# ==> dist/Mxplorer-0.0.3-alpha.2-amd64.deb
-# ==> dist/Mxplorer-0.0.3-alpha.2-linux-amd64-static.tar.gz
+# ==> dist/Mxplorer-0.0.4-alpha.1-amd64.deb
+# ==> dist/Mxplorer-0.0.4-alpha.1-linux-amd64-static.tar.gz
 ```
 
 | 系统 | 安装方式 |
 | --- | --- |
-| Debian 8+ | `sudo apt-get install ./dist/Mxplorer-0.0.3-alpha.2-amd64.deb` |
-| Debian 7.11（旧 apt） | `sudo dpkg -i ./dist/Mxplorer-0.0.3-alpha.2-amd64.deb` |
-| 其他发行版 | 解包 `Mxplorer-0.0.3-alpha.2-linux-amd64-static.tar.gz`，运行 `usr/bin/mxplorer` |
+| Debian 8+ | `sudo apt-get install ./dist/Mxplorer-0.0.4-alpha.1-amd64.deb` |
+| Debian 7.11（旧 apt） | `sudo dpkg -i ./dist/Mxplorer-0.0.4-alpha.1-amd64.deb` |
+| 其他发行版 | 解包 `Mxplorer-0.0.4-alpha.1-linux-amd64-static.tar.gz`，运行 `usr/bin/mxplorer` |
 
-0.0.3-alpha.2 是 0.0.3 功能集的兼容性验证重发版，继续使用 alpha.1 的全静态
-musl 构建、通用产物命名、终端补全与功能行为，没有功能性变化。Debian 7 的旧 apt
-不支持本地路径安装，因此使用 `dpkg -i`。Debian 7.11–13.7 与 forky/sid amd64
-兼容性矩阵记录在
+0.0.4-alpha.1 新增精确的双横线长选项、长选项 Tab 补全、`--name=value`
+写法与 `--` 选项终止符。最新完整验证版本仍是 0.0.3-alpha.2；该基线的
+Debian 7.11–13.7 与 forky/sid amd64 兼容性矩阵记录在
 [兼容性报告](docs/testing/v0.0.3-alpha.2/2026-10-20-compatibility-test-report.md)。
 
 `build_deb.sh` 会先调用 `build_static.sh`（所以测试一定会跑），复制并 strip
@@ -194,7 +201,7 @@ tar.gz 是同一棵安装树，给不用 dpkg 的系统。
 已实现：列目录（含自然序、目录优先）、详细信息、复制、移动、删除、建目录、
 目录树、按名字或内容检索（glob / 子串 / 正则，带类型、深度、大小与时间过滤，
 可一次搜多个起点）、进度显示、取消、错误分类、交互式行编辑与命令/路径/短选项
-Tab 补全，以及六套测试（shell 冒烟测试、真实 PTY 补全测试、补全引擎检查、
+和长选项 Tab 补全，以及六套测试（shell 冒烟测试、真实 PTY 补全测试、补全引擎检查、
 复制原子性的 core 测试、检索取消检查、纯函数的单元检查）。Qt6 前端尚未实现，
 当前只有终端界面。
 
@@ -227,8 +234,8 @@ Tab 补全，以及六套测试（shell 冒烟测试、真实 PTY 补全测试�
   也只占有限内存；想要结果数组的调用方可以保持默认收集。
 - 补全在终端前端内用 POSIX 终端接口和 `list_directory()` 实现，不往 core 引入
   readline/Qt 依赖。
-- 明确不做：保留属主、reflink/clone 优化、持久化命令历史、双横线长选项、
-  复制管道/套接字/设备文件、单个超大目录的进度、回收站与撤销。
+- 明确不做：保留属主、reflink/clone 优化、持久化命令历史、复制管道/套接字/
+  设备文件、单个超大目录的进度、回收站与撤销。
 
 ## 代码风格
 

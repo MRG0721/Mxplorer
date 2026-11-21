@@ -5,6 +5,7 @@
 
 #include "completion.hpp"
 #include "line_editor.hpp"
+#include "options.hpp"
 #include "mxplorer/directory.hpp"
 #include "mxplorer/entry.hpp"
 #include "mxplorer/operations.hpp"
@@ -126,40 +127,6 @@ std::size_t display_width(const std::string& text)
         }
     }
     return width;
-}
-
-struct ParsedArgs
-{
-    std::set<char> flags;
-    std::vector<std::string> positional;
-    std::vector<char> unknown;
-};
-
-ParsedArgs parse_args(const std::vector<std::string>& args, std::string_view allowed)
-{
-    ParsedArgs parsed;
-    for (const std::string& arg : args)
-    {
-        const bool looks_like_flags = arg.size() > 1 && arg.front() == '-' && arg[1] != '-';
-        if (!looks_like_flags)
-        {
-            parsed.positional.push_back(arg);
-            continue;
-        }
-        for (std::size_t i = 1; i < arg.size(); ++i)
-        {
-            const char flag = arg[i];
-            if (allowed.find(flag) == std::string_view::npos)
-            {
-                parsed.unknown.push_back(flag);
-            }
-            else
-            {
-                parsed.flags.insert(flag);
-            }
-        }
-    }
-    return parsed;
 }
 
 /// Splits a line into arguments. Supports 'single' and "double" quotes and
@@ -501,24 +468,34 @@ void Shell::register_commands()
 
     add("help", "help [command]", "show the command list",
         [this](const Args& args) { return cmd_help(args); });
-    add("ls", "ls [-a] [-l] [path]", "list a directory",
-        [this](const Args& args) { return cmd_ls(args); });
-    add("ll", "ll [path]", "list a directory in long format (ls -l)",
-        [this](const Args& args) { return cmd_ls(args); }, {"-l"});
+    add(
+        "ls", "ls [-a] [-l] [path]", "list a directory",
+        [this](const Args& args) { return cmd_ls(args); }, {},
+        R"TXT(  -a, --all     include hidden entries
+  -l, --long    show permissions, size and modification time
+)TXT");
+    add(
+        "ll", "ll [path]", "list a directory in long format (ls -l)",
+        [this](const Args& args) { return cmd_ls(args); }, {"-l"},
+        R"TXT(  -a, --all     include hidden entries
+  -l, --long    accepted for compatibility; long format is already enabled
+)TXT");
     add("cd", "cd [path]", "change the current directory ('-' goes back)",
         [this](const Args& args) { return cmd_cd(args); });
     add("pwd", "pwd", "print the current directory",
         [this](const Args& args) { return cmd_pwd(args); });
     const std::string preserve_details =
-        R"TXT(  -p            keep permissions, timestamps, hard links inside the copied
+        R"TXT(  -p, --preserve
+                keep permissions, timestamps, hard links inside the copied
                 tree, and extended attributes (ACLs travel as posix_acl xattrs)
 )TXT";
     const std::string copy_details = preserve_details +
-                                     R"TXT(  -f            overwrite an existing destination
-  -r            copy directories recursively
+                                     R"TXT(  -f, --force   overwrite an existing destination
+  -r, --recursive
+                copy directories recursively
 )TXT";
     const std::string move_details = preserve_details +
-                                     R"TXT(  -f            overwrite an existing destination
+                                     R"TXT(  -f, --force   overwrite an existing destination
 )TXT";
     add(
         "cp", "cp [-r] [-f] [-p] src... dst", "copy files or directories",
@@ -526,33 +503,54 @@ void Shell::register_commands()
     add(
         "mv", "mv [-f] [-p] src... dst", "move or rename files and directories",
         [this](const Args& args) { return cmd_mv(args); }, {}, move_details);
-    add("rm", "rm [-r] [-f] path...", "remove files or directory trees",
-        [this](const Args& args) { return cmd_rm(args); });
-    add("mkdir", "mkdir [-p] path...", "create directories",
-        [this](const Args& args) { return cmd_mkdir(args); });
+    add(
+        "rm", "rm [-r] [-f] path...", "remove files or directory trees",
+        [this](const Args& args) { return cmd_rm(args); }, {},
+        R"TXT(  -r, --recursive  remove directories and their contents
+  -f, --force      ignore paths that do not exist
+)TXT");
+    add(
+        "mkdir", "mkdir [-p] path...", "create directories",
+        [this](const Args& args) { return cmd_mkdir(args); }, {},
+        R"TXT(  -p, --parents  create missing parent directories
+)TXT");
     add("stat", "stat path...", "show details about a file or directory",
         [this](const Args& args) { return cmd_stat(args); });
-    add("tree", "tree [path] [-L depth]", "draw the directory hierarchy",
-        [this](const Args& args) { return cmd_tree(args); });
+    add(
+        "tree", "tree [path] [-L depth]", "draw the directory hierarchy",
+        [this](const Args& args) { return cmd_tree(args); }, {},
+        R"TXT(  -L, --level <depth>
+                limit recursion depth (0 prints only the root)
+)TXT");
 
     const std::string find_details =
-        R"TXT(  -i            ignore case (non-ASCII needs a UTF-8 locale)
-  -E            treat the pattern as an ECMAScript regular expression
-  -F            treat the pattern as plain text (substring match)
-  -l            long format for each match (permissions, size, modified time)
-  -a            include hidden entries
-  -t f|d|l      only regular files, only directories, or only symlinks
-  -d <depth>    do not descend deeper than this (1 = the root's own entries)
-  -n <count>    stop after this many matches
-  -c <text>     only regular files whose contents contain this text
-  -s +N[KMG]    larger than N bytes (K/M/G are 1024-based, for example -s +10M)
-  -s -N[KMG]    smaller than N bytes
-  -m +N[dhms]   modified longer ago than N (for example -m +7d)
-  -m -N[dhms]   modified more recently than N
+        R"TXT(  -i, --ignore-case
+                ignore case (non-ASCII needs a UTF-8 locale)
+  -E, --regex   treat the pattern as an ECMAScript regular expression
+  -F, --literal treat the pattern as plain text (substring match)
+  -l, --long    long format for each match (permissions, size, modified time)
+  -a, --all     include hidden entries
+  -t, --type f|d|l
+                only regular files, only directories, or only symlinks
+  -d, --depth <depth>
+                do not descend deeper than this (1 = the root's own entries)
+  -n, --limit <count>
+                stop after this many matches
+  -c, --content <text>
+                only regular files whose contents contain this text
+  -s, --size +N[KMG]
+                larger than N bytes (K/M/G are 1024-based, for example -s +10M)
+  -s, --size -N[KMG]
+                smaller than N bytes
+  -m, --modified +N[dhms]
+                modified longer ago than N (for example -m +7d)
+  -m, --modified -N[dhms]
+                modified more recently than N
 
   The pattern is matched against the entry name, not the whole path. Without -E
   or -F it is a glob ('*', '?' and '[...]'); a glob that contains no wildcard is
   treated as "*pattern*", so "report" also finds "quarterly-report.pdf".
+  Long value options also accept --name=value. Use -- to stop option parsing.
   Symbolic links are never followed and the root itself is not a candidate.
   Several paths may be given; a multi-root search validates every root before
   it prints anything.
@@ -668,6 +666,12 @@ int Shell::run_command(const std::vector<std::string>& args)
         std::signal(SIGINT, previous_handler);
         return status;
     }
+    if (args.size() == 2 && args[1] == "--help")
+    {
+        const int status = cmd_help({name});
+        std::signal(SIGINT, previous_handler);
+        return status;
+    }
 
     std::vector<std::string> forwarded = it->second.prefix;
     forwarded.insert(forwarded.end(), args.begin() + 1, args.end());
@@ -711,8 +715,9 @@ void Shell::print_help() const
     }
     std::cout << "\nFlags: -a all (hidden files too), -l long format, -r recursive, "
                  "-f overwrite/ignore missing, -p keep permissions.\n"
-                 "find has its own options: run 'help find'.\n"
-                 "Tab completes commands, paths and short options. "
+                 "Every option also has a long form; run 'help find' for an example. "
+                 "Use -- to stop option parsing.\n"
+                 "Tab completes commands, paths and short or long options. "
                  "Arrow keys, Home/End, Ctrl-A/E/U/K and Ctrl-W edit the line.\n";
 }
 
@@ -728,18 +733,17 @@ int Shell::fail(const std::string& message)
     return 1;
 }
 
-int Shell::usage_error(const std::string& command, const std::vector<char>& unknown_flags)
+int Shell::usage_error(const std::string& command, const std::vector<std::string>& unknown_options)
 {
     std::string message = command + ": unknown option";
-    if (unknown_flags.size() > 1)
+    if (unknown_options.size() > 1)
     {
         message += 's';
     }
-    for (const char flag : unknown_flags)
+    for (const std::string& option : unknown_options)
     {
         message += ' ';
-        message += '-';
-        message += flag;
+        message += option;
     }
 
     const auto it = commands_.find(command);
@@ -773,7 +777,11 @@ int Shell::cmd_help(const Args& args)
 
 int Shell::cmd_ls(const Args& args)
 {
-    const ParsedArgs parsed = parse_args(args, "al");
+    const ParsedOptions parsed = parse_options(args, "ls");
+    if (!parsed.missing_value.empty())
+    {
+        return fail("ls: " + parsed.missing_value + " expects a value");
+    }
     if (!parsed.unknown.empty())
     {
         return usage_error("ls", parsed.unknown);
@@ -817,12 +825,17 @@ int Shell::cmd_ls(const Args& args)
 
 int Shell::cmd_cd(const Args& args)
 {
-    if (args.size() > 1)
+    std::vector<std::string> positional = args;
+    if (!positional.empty() && positional.front() == "--")
+    {
+        positional.erase(positional.begin());
+    }
+    if (positional.size() > 1)
     {
         return fail("cd: too many arguments");
     }
 
-    const std::string target = args.empty() ? std::string("~") : args.front();
+    const std::string target = positional.empty() ? std::string("~") : positional.front();
     const Error result = session_.change_directory(target);
     if (!result.ok())
     {
@@ -843,7 +856,11 @@ int Shell::cmd_pwd(const Args& args)
 
 int Shell::copy_or_move(const Args& args, bool move, const std::string& command)
 {
-    const ParsedArgs parsed = parse_args(args, move ? "fp" : "rfp");
+    const ParsedOptions parsed = parse_options(args, command);
+    if (!parsed.missing_value.empty())
+    {
+        return fail(command + ": " + parsed.missing_value + " expects a value");
+    }
     if (!parsed.unknown.empty())
     {
         return usage_error(command, parsed.unknown);
@@ -906,7 +923,11 @@ int Shell::cmd_mv(const Args& args)
 
 int Shell::cmd_rm(const Args& args)
 {
-    const ParsedArgs parsed = parse_args(args, "rf");
+    const ParsedOptions parsed = parse_options(args, "rm");
+    if (!parsed.missing_value.empty())
+    {
+        return fail("rm: " + parsed.missing_value + " expects a value");
+    }
     if (!parsed.unknown.empty())
     {
         return usage_error("rm", parsed.unknown);
@@ -951,7 +972,11 @@ int Shell::cmd_rm(const Args& args)
 
 int Shell::cmd_mkdir(const Args& args)
 {
-    const ParsedArgs parsed = parse_args(args, "p");
+    const ParsedOptions parsed = parse_options(args, "mkdir");
+    if (!parsed.missing_value.empty())
+    {
+        return fail("mkdir: " + parsed.missing_value + " expects a value");
+    }
     if (!parsed.unknown.empty())
     {
         return usage_error("mkdir", parsed.unknown);
@@ -987,7 +1012,11 @@ int Shell::cmd_mkdir(const Args& args)
 
 int Shell::cmd_stat(const Args& args)
 {
-    const ParsedArgs parsed = parse_args(args, "");
+    const ParsedOptions parsed = parse_options(args, "stat");
+    if (!parsed.missing_value.empty())
+    {
+        return fail("stat: " + parsed.missing_value + " expects a value");
+    }
     if (!parsed.unknown.empty())
     {
         return usage_error("stat", parsed.unknown);
@@ -1037,7 +1066,6 @@ int Shell::cmd_tree(const Args& args)
 {
     std::string target = ".";
     long max_depth = -1;
-    std::vector<std::string> positional;
 
     auto parse_depth = [](const std::string& text, long& depth)
     {
@@ -1058,45 +1086,33 @@ int Shell::cmd_tree(const Args& args)
         }
     };
 
-    for (std::size_t i = 0; i < args.size(); ++i)
+    const ParsedOptions parsed = parse_options(args, "tree");
+    if (!parsed.missing_value.empty())
     {
-        const std::string& arg = args[i];
-        if (arg == "-L")
+        return fail("tree: " + parsed.missing_value +
+                    " expects a depth, for example "
+                    "--level 2");
+    }
+    if (!parsed.unknown.empty())
+    {
+        return usage_error("tree", parsed.unknown);
+    }
+
+    if (const auto depth = parsed.values.find('L'); depth != parsed.values.end())
+    {
+        if (!parse_depth(depth->second, max_depth))
         {
-            if (i + 1 >= args.size())
-            {
-                return fail("tree: -L expects a depth, for example -L 2");
-            }
-            ++i;
-            if (!parse_depth(args[i], max_depth))
-            {
-                return fail("tree: -L expects a depth, for example -L 2");
-            }
-        }
-        else if (arg.rfind("-L", 0) == 0 && arg.size() > 2)
-        {
-            if (!parse_depth(arg.substr(2), max_depth))
-            {
-                return fail("tree: invalid depth '" + arg.substr(2) + "'");
-            }
-        }
-        else if (arg.size() > 1 && arg.front() == '-')
-        {
-            return fail("tree: unknown option " + arg);
-        }
-        else
-        {
-            positional.push_back(arg);
+            return fail("tree: invalid depth '" + depth->second + "'");
         }
     }
 
-    if (positional.size() > 1)
+    if (parsed.positional.size() > 1)
     {
         return fail("tree: expected at most one path");
     }
-    if (!positional.empty())
+    if (!parsed.positional.empty())
     {
-        target = positional.front();
+        target = parsed.positional.front();
     }
 
     const fs::path root = session_.resolve(target);
@@ -1126,22 +1142,6 @@ int Shell::cmd_find(const Args& args)
 {
     SearchOptions options;
     bool long_format = false;
-    std::vector<std::string> positional;
-
-    // "-t f" and "-tf" are both accepted, like the other value options below.
-    const auto take_value = [&args](std::size_t& index, const std::string& arg,
-                                    std::string_view flag) -> std::optional<std::string>
-    {
-        if (arg.size() > flag.size())
-        {
-            return arg.substr(flag.size());
-        }
-        if (index + 1 < args.size())
-        {
-            return args[++index];
-        }
-        return std::nullopt;
-    };
 
     const auto parse_number = [](const std::string& text, long long& value)
     {
@@ -1251,141 +1251,122 @@ int Shell::cmd_find(const Args& args)
         return true;
     };
 
-    for (std::size_t i = 0; i < args.size(); ++i)
+    const ParsedOptions parsed = parse_options(args, "find");
+    if (!parsed.missing_value.empty())
     {
-        const std::string& arg = args[i];
+        return fail("find: " + parsed.missing_value + " expects a value");
+    }
+    if (!parsed.unknown.empty())
+    {
+        return usage_error("find", parsed.unknown);
+    }
 
-        if (arg == "-i")
+    for (const char flag : parsed.flag_order)
+    {
+        switch (flag)
         {
-            options.case_sensitive = false;
-        }
-        else if (arg == "-E")
-        {
-            options.mode = MatchMode::regex;
-        }
-        else if (arg == "-F")
-        {
-            options.mode = MatchMode::substring;
-        }
-        else if (arg == "-l")
-        {
-            long_format = true;
-        }
-        else if (arg == "-a")
-        {
-            options.include_hidden = true;
-        }
-        else if (arg.rfind("-t", 0) == 0)
-        {
-            const std::optional<std::string> value = take_value(i, arg, "-t");
-            if (!value)
-            {
-                return fail("find: -t needs a type (f, d or l)");
-            }
-            if (*value == "f")
-            {
-                options.filter = EntryFilter::file;
-            }
-            else if (*value == "d")
-            {
-                options.filter = EntryFilter::directory;
-            }
-            else if (*value == "l")
-            {
-                options.filter = EntryFilter::symlink;
-            }
-            else
-            {
-                return fail("find: -t expects f, d or l, got '" + *value + "'");
-            }
-        }
-        else if (arg.rfind("-d", 0) == 0)
-        {
-            const std::optional<std::string> value = take_value(i, arg, "-d");
-            long long depth = 0;
-            if (!value || !parse_number(*value, depth))
-            {
-                return fail("find: -d expects a non-negative depth");
-            }
-            if (depth > std::numeric_limits<int>::max())
-            {
-                return fail("find: -d is too large");
-            }
-            options.max_depth = static_cast<int>(depth);
-        }
-        else if (arg.rfind("-n", 0) == 0)
-        {
-            const std::optional<std::string> value = take_value(i, arg, "-n");
-            long long limit = 0;
-            if (!value || !parse_number(*value, limit))
-            {
-                return fail("find: -n expects a non-negative number");
-            }
-            options.max_results = static_cast<std::size_t>(limit);
-        }
-        else if (arg.rfind("-c", 0) == 0)
-        {
-            const std::optional<std::string> value = take_value(i, arg, "-c");
-            if (!value)
-            {
-                return fail("find: -c needs the text to look for");
-            }
-            options.content_pattern = *value;
-        }
-        else if (arg.rfind("-s", 0) == 0)
-        {
-            const std::optional<std::string> value = take_value(i, arg, "-s");
-            bool greater = false;
-            std::uintmax_t bytes = 0;
-            if (!value || !parse_size(*value, greater, bytes))
-            {
-                return fail("find: -s expects +N or -N with an optional K/M/G/T unit, "
-                            "for example -s +10M");
-            }
-            if (greater)
-            {
-                options.size_greater_than = bytes;
-            }
-            else
-            {
-                options.size_less_than = bytes;
-            }
-        }
-        else if (arg.rfind("-m", 0) == 0)
-        {
-            const std::optional<std::string> value = take_value(i, arg, "-m");
-            bool older = false;
-            std::chrono::seconds age{};
-            if (!value || !parse_age(*value, older, age))
-            {
-                return fail("find: -m expects +N or -N with a d/h/m/s unit, "
-                            "for example -m +7d");
-            }
-            if (older)
-            {
-                options.older_than = age;
-            }
-            else
-            {
-                options.newer_than = age;
-            }
-        }
-        else if (arg.size() > 1 && arg.front() == '-')
-        {
-            return fail("find: unknown option " + arg);
-        }
-        else
-        {
-            positional.push_back(arg);
+            case 'i': options.case_sensitive = false; break;
+            case 'E': options.mode = MatchMode::regex; break;
+            case 'F': options.mode = MatchMode::substring; break;
+            case 'l': long_format = true; break;
+            case 'a': options.include_hidden = true; break;
+            default: break;
         }
     }
 
-    if (positional.empty())
+    if (const auto type = parsed.values.find('t'); type != parsed.values.end())
+    {
+        if (type->second == "f")
+        {
+            options.filter = EntryFilter::file;
+        }
+        else if (type->second == "d")
+        {
+            options.filter = EntryFilter::directory;
+        }
+        else if (type->second == "l")
+        {
+            options.filter = EntryFilter::symlink;
+        }
+        else
+        {
+            return fail("find: --type expects f, d or l, got '" + type->second + "'");
+        }
+    }
+
+    if (const auto depth_value = parsed.values.find('d'); depth_value != parsed.values.end())
+    {
+        long long depth = 0;
+        if (!parse_number(depth_value->second, depth))
+        {
+            return fail("find: --depth expects a non-negative depth");
+        }
+        if (depth > std::numeric_limits<int>::max())
+        {
+            return fail("find: --depth is too large");
+        }
+        options.max_depth = static_cast<int>(depth);
+    }
+
+    if (const auto limit = parsed.values.find('n'); limit != parsed.values.end())
+    {
+        long long value = 0;
+        if (!parse_number(limit->second, value))
+        {
+            return fail("find: --limit expects a non-negative number");
+        }
+        options.max_results = static_cast<std::size_t>(value);
+    }
+
+    if (const auto content = parsed.values.find('c'); content != parsed.values.end())
+    {
+        options.content_pattern = content->second;
+    }
+
+    if (const auto size = parsed.values.find('s'); size != parsed.values.end())
+    {
+        bool greater = false;
+        std::uintmax_t bytes = 0;
+        if (!parse_size(size->second, greater, bytes))
+        {
+            return fail("find: --size expects +N or -N with an optional K/M/G/T unit, "
+                        "for example --size +10M");
+        }
+        if (greater)
+        {
+            options.size_greater_than = bytes;
+        }
+        else
+        {
+            options.size_less_than = bytes;
+        }
+    }
+
+    if (const auto modified = parsed.values.find('m'); modified != parsed.values.end())
+    {
+        bool older = false;
+        std::chrono::seconds age{};
+        if (!parse_age(modified->second, older, age))
+        {
+            return fail("find: --modified expects +N or -N with a d/h/m/s unit, "
+                        "for example --modified +7d");
+        }
+        if (older)
+        {
+            options.older_than = age;
+        }
+        else
+        {
+            options.newer_than = age;
+        }
+    }
+
+    if (parsed.positional.empty())
     {
         return fail("find: needs a pattern; try 'help find'");
     }
 
-    options.pattern = positional.front();
+    options.pattern = parsed.positional.front();
 
     if (const Error invalid = validate_search_options(options); !invalid.ok())
     {
@@ -1393,9 +1374,9 @@ int Shell::cmd_find(const Args& args)
     }
 
     std::vector<fs::path> roots;
-    for (std::size_t i = 1; i < positional.size(); ++i)
+    for (std::size_t i = 1; i < parsed.positional.size(); ++i)
     {
-        roots.push_back(session_.resolve(positional[i]));
+        roots.push_back(session_.resolve(parsed.positional[i]));
     }
     if (roots.empty())
     {
