@@ -197,8 +197,10 @@ int main(int argc, char** argv)
     std::error_code ec;
     fs::remove_all(work, ec);
     fs::create_directories(work / "my dir", ec);
+    fs::create_directories(work / "中文目录", ec);
     {
         std::ofstream(work / "my dir" / "file.txt") << "x\n";
+        std::ofstream(work / "中文目录" / "中文文件.txt") << "x\n";
     }
 
     PtyShell shell;
@@ -220,6 +222,14 @@ int main(int argc, char** argv)
 
     shell.send("ls\n");
     expect(shell.wait_for("file.txt"), "the completed directory should contain the test file");
+
+    shell.send("cd ..\n");
+    shell.send("cd 中\t\n");
+    expect(shell.wait_for("中文目录\033[0m$ "), "Tab should complete a UTF-8 directory name");
+
+    shell.send("ls\n");
+    expect(shell.wait_for("中文文件.txt"),
+           "the completed UTF-8 directory should contain its test file");
 
     shell.send("exit\n");
     expect(shell.finish(), "exit should close the shell cleanly");
