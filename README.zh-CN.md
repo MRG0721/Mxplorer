@@ -28,10 +28,14 @@
 
 二进制把 musl、libstdc++ 与 libgcc 一起装进自身，运行时没有任何动态库依赖。
 `ctest` 会在静态二进制上运行 `core_operations`、`core_utils`、`core_search`、
-`cli_completion`、`cli_completion_pty` 与 `cli_smoke`。测试资料位于
+`cli_options`、`cli_completion`、`cli_completion_pty` 与 `cli_smoke`。测试资料位于
 `docs/testing/`，包括
 [0.0.3-alpha.2 兼容性报告](docs/testing/v0.0.3-alpha.2/2026-10-20-compatibility-test-report.md)
-与[测试平台说明](docs/testing/test-platform.md)。
+与[测试平台说明](docs/testing/test-platform.md)。发布后的
+[0.0.4-alpha.1 解析器加固报告](docs/testing/v0.0.4-alpha.1/2026-11-25-parser-hardening-test-report.md)
+记录了独立长选项测试套件；
+[0.0.4-alpha.2 CJK 宽度报告](docs/testing/v0.0.4-alpha.2/2026-11-25-cjk-display-width-test-report.md)
+记录终端单元格宽度覆盖。
 
 除标准库外只用到几个 POSIX 接口：core 用 `pwd.h`（取家目录）、`fnmatch.h`（检索的
 通配符匹配）、`sys/stat.h`（属性与时间戳）、`sys/xattr.h`（扩展属性与 ACL）以及少量
@@ -61,8 +65,10 @@ mxplorer/
 ├── packaging/                # 静态构建 + deb 打包
 │   ├── build_static.sh       # 固定 Alpine/musl 工具链、构建与 ctest
 │   └── build_deb.sh          # deb 与静态 tar.gz
-└── tests/                    # 六套测试，都由 ctest 驱动
+└── tests/                    # 八套测试，都由 ctest 驱动
     ├── smoke_test.sh         # 终端前端的端到端检查
+    ├── text_width_test.cpp   # locale-aware 终端单元格宽度
+    ├── options_test.cpp      # 短/长选项语法与错误数据
     ├── completion_test.cpp   # 命令、路径与选项补全
     ├── completion_pty_test.cpp # 通过伪终端测试真实 Tab 键
     ├── core_search_test.cpp  # 确定性的检索取消检查
@@ -76,7 +82,7 @@ mxplorer/
 
 ```
 $ ./build/musl/build/cli/mxplorer
-mxplorer 0.0.4-alpha.1 | type 'help' for commands, Tab completes, 'exit' to quit
+mxplorer 0.0.4-alpha.2 | type 'help' for commands, Tab completes, 'exit' to quit
 mxplorer:~$ cd mxplorer
 mxplorer:~/mxplorer$ ls
 ...
@@ -124,18 +130,19 @@ Home/End、退格、Delete、Ctrl-A/E/B/F/U/K 与 Ctrl-W。目前没有持久化
 
 ```sh
 ./packaging/build_deb.sh
-# ==> dist/Mxplorer-0.0.4-alpha.1-amd64.deb
-# ==> dist/Mxplorer-0.0.4-alpha.1-linux-amd64-static.tar.gz
+# ==> dist/Mxplorer-0.0.4-alpha.2-amd64.deb
+# ==> dist/Mxplorer-0.0.4-alpha.2-linux-amd64-static.tar.gz
 ```
 
 | 系统 | 安装方式 |
 | --- | --- |
-| Debian 8+ | `sudo apt-get install ./dist/Mxplorer-0.0.4-alpha.1-amd64.deb` |
-| Debian 7.11（旧 apt） | `sudo dpkg -i ./dist/Mxplorer-0.0.4-alpha.1-amd64.deb` |
-| 其他发行版 | 解包 `Mxplorer-0.0.4-alpha.1-linux-amd64-static.tar.gz`，运行 `usr/bin/mxplorer` |
+| Debian 8+ | `sudo apt-get install ./dist/Mxplorer-0.0.4-alpha.2-amd64.deb` |
+| Debian 7.11（旧 apt） | `sudo dpkg -i ./dist/Mxplorer-0.0.4-alpha.2-amd64.deb` |
+| 其他发行版 | 解包 `Mxplorer-0.0.4-alpha.2-linux-amd64-static.tar.gz`，运行 `usr/bin/mxplorer` |
 
-0.0.4-alpha.1 新增精确的双横线长选项、长选项 Tab 补全、`--name=value`
-写法与 `--` 选项终止符。最新完整验证版本仍是 0.0.3-alpha.2；该基线的
+0.0.4-alpha.2 保留 alpha.1 的双横线长选项，并改用终端单元格而非 UTF-8 字节
+计算宽度，修正 ASCII/CJK 混合多列对齐、行编辑器光标移动和补全候选布局。
+最新完整验证版本仍是 0.0.3-alpha.2；该基线的
 Debian 7.11–13.7 与 forky/sid amd64 兼容性矩阵记录在
 [兼容性报告](docs/testing/v0.0.3-alpha.2/2026-10-20-compatibility-test-report.md)。
 
@@ -201,8 +208,9 @@ tar.gz 是同一棵安装树，给不用 dpkg 的系统。
 已实现：列目录（含自然序、目录优先）、详细信息、复制、移动、删除、建目录、
 目录树、按名字或内容检索（glob / 子串 / 正则，带类型、深度、大小与时间过滤，
 可一次搜多个起点）、进度显示、取消、错误分类、交互式行编辑与命令/路径/短选项
-和长选项 Tab 补全，以及六套测试（shell 冒烟测试、真实 PTY 补全测试、补全引擎检查、
-复制原子性的 core 测试、检索取消检查、纯函数的单元检查）。Qt6 前端尚未实现，
+和长选项 Tab 补全，以及八套测试（shell 冒烟测试、真实 PTY 补全测试、
+终端文本宽度检查、选项解析器检查、补全引擎检查、复制原子性的 core 测试、
+检索取消检查、纯函数的单元检查）。Qt6 前端尚未实现，
 当前只有终端界面。
 
 几个需要知道的行为：
