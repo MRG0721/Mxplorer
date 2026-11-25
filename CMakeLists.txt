@@ -12,7 +12,7 @@ project(Mxplorer
 # features are added. The release tag changes for re-releases of the same
 # feature set (a new delivery format, a packaging fix, ...). Together they form
 # the version string reported by the binary and used by the package.
-set(MXPLORER_RELEASE_TAG "alpha.1")
+set(MXPLORER_RELEASE_TAG "alpha.2")
 set(MXPLORER_VERSION_STRING "${PROJECT_VERSION}-${MXPLORER_RELEASE_TAG}")
 
 set(CMAKE_CXX_STANDARD 20)
@@ -81,6 +81,30 @@ if(BUILD_TESTING)
     add_test(NAME core_search COMMAND mxplorer_core_search_test)
 
     if(MXPLORER_BUILD_CLI)
+        add_executable(mxplorer_text_width_test
+            tests/text_width_test.cpp
+            cli/src/terminal_text_width.cpp)
+        target_include_directories(mxplorer_text_width_test PRIVATE cli/src)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(mxplorer_text_width_test PRIVATE -Wall -Wextra -Wpedantic)
+            if(MXPLORER_WARNINGS_AS_ERRORS)
+                target_compile_options(mxplorer_text_width_test PRIVATE -Werror)
+            endif()
+        endif()
+        add_test(NAME cli_text_width COMMAND mxplorer_text_width_test)
+
+        add_executable(mxplorer_options_test
+            tests/options_test.cpp
+            cli/src/options.cpp)
+        target_include_directories(mxplorer_options_test PRIVATE cli/src)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(mxplorer_options_test PRIVATE -Wall -Wextra -Wpedantic)
+            if(MXPLORER_WARNINGS_AS_ERRORS)
+                target_compile_options(mxplorer_options_test PRIVATE -Werror)
+            endif()
+        endif()
+        add_test(NAME cli_options COMMAND mxplorer_options_test)
+
         add_executable(mxplorer_completion_test
             tests/completion_test.cpp
             cli/src/completion.cpp
