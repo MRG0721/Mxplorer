@@ -1,7 +1,7 @@
 .\" SPDX-License-Identifier: GPL-3.0-or-later
 .\" Copyright (C) 2026 MRG0721
 
-.TH MXPLORER 1 "2026-11-21" "mxplorer @MXPLORER_VERSION_STRING@" "User Commands"
+.TH MXPLORER 1 "2026-11-25" "mxplorer @MXPLORER_VERSION_STRING@" "User Commands"
 .SH NAME
 mxplorer \- terminal file manager built on a UI independent core
 .SH SYNOPSIS
@@ -36,6 +36,10 @@ with
 pressing Tab again lists alternatives when the common prefix cannot be
 extended.  The line editor supports the left/right arrow keys, Home, End,
 Backspace, Delete, and the usual Ctrl-A/E/B/F/U/K/W/L editing keys.
+.PP
+Column output, cursor movement and completion wrapping use terminal cell width
+rather than UTF-8 byte length, so CJK and fullwidth names align correctly under
+a UTF-8 locale.
 .PP
 Every short option has an exact double-dash long form.  Boolean examples are
 .BR \-\-all ,
