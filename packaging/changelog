@@ -1,5 +1,18 @@
 mxplorer (@VERSION@) unstable; urgency=low
 
+  * Fix mixed ASCII/CJK column alignment by measuring terminal cells rather
+    than UTF-8 bytes.
+  * Correct line-editor cursor movement and completion candidate wrapping for
+    wide characters using locale-aware wcwidth().
+  * Keep terminal text measurement private to the CLI; core remains UI
+    independent and no Qt code or dependency is introduced.
+  * Add direct terminal-width checks, mixed CJK smoke coverage and UTF-8 path
+    completion through a real PTY; eight ctest suites now pass 343 checks.
+
+ -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  @DATE@
+
+mxplorer (0.0.4-alpha.1) unstable; urgency=low
+
   * Add precise double-dash long options for every existing short option.
   * Complete short and long option names at the interactive prompt.
   * Accept --name=value and --name value for options that take a value.
