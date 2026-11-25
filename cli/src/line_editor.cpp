@@ -3,6 +3,8 @@
 
 #include "line_editor.hpp"
 
+#include "terminal_text_width.hpp"
+
 #include <algorithm>
 #include <cerrno>
 #include <csignal>
@@ -126,19 +128,6 @@ void write_output(std::string_view text)
     }
 }
 
-std::size_t display_width(std::string_view text, std::size_t begin, std::size_t end)
-{
-    std::size_t width = 0;
-    for (std::size_t i = begin; i < end; ++i)
-    {
-        if ((static_cast<unsigned char>(text[i]) & 0xC0) != 0x80)
-        {
-            ++width;
-        }
-    }
-    return width;
-}
-
 std::size_t terminal_width()
 {
     struct winsize size{};
@@ -183,7 +172,7 @@ void render(std::string_view prompt, std::string_view line, std::size_t cursor)
     write_output(prompt);
     write_output(line);
 
-    const std::size_t suffix_width = display_width(line, cursor, line.size());
+    const std::size_t suffix_width = terminal_text_width(line, cursor, line.size());
     if (suffix_width > 0)
     {
         write_output(std::format("\033[{}D", suffix_width));
@@ -200,7 +189,7 @@ void print_candidates(std::string_view prompt, std::string_view line, std::size_
     bool first = true;
     for (const std::string& candidate : candidates)
     {
-        const std::size_t item_width = display_width(candidate, 0, candidate.size());
+        const std::size_t item_width = terminal_text_width(candidate);
         if (!first && column > 0 && column + 2 + item_width > width)
         {
             write_output("\n");
