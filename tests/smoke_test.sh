@@ -83,6 +83,15 @@ out="$("$MXPLORER" ls --all --long .)"
 contains "$out" ".hidden/"
 contains "$out" "-rw"
 
+# Mixed ASCII/CJK names must be padded by terminal cells, not UTF-8 bytes.
+mkdir cjk-layout
+touch cjk-layout/a cjk-layout/abcd cjk-layout/b cjk-layout/中 \
+    cjk-layout/中文 cjk-layout/日本語
+out="$(LC_ALL=C.UTF-8 "$MXPLORER" ls cjk-layout)"
+expected="a       abcd    b       中      中文    日本語"
+[[ "$out" == "$expected" ]] || fail "mixed CJK columns are misaligned: [$out]"
+ok
+
 # "--" stops option parsing, so names that begin with dashes remain usable.
 echo "dash" >"--all"
 out="$("$MXPLORER" stat -- --all)"
