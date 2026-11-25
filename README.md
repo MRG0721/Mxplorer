@@ -32,10 +32,14 @@ toolchain packages; later runs use the cache and work offline.
 
 The binary carries musl, libstdc++ and libgcc inside itself, so it has no
 runtime library dependencies. `ctest` runs `core_operations`, `core_utils`,
-`core_search`, `cli_completion`, `cli_completion_pty` and `cli_smoke` against
-the static binaries. Testing records are in `docs/testing/`, including the
+`core_search`, `cli_options`, `cli_completion`, `cli_completion_pty` and
+`cli_smoke` against the static binaries. Testing records are in `docs/testing/`, including the
 [0.0.3-alpha.2 compatibility report](docs/testing/v0.0.3-alpha.2/2026-10-20-compatibility-test-report.md)
-and [platform details](docs/testing/test-platform.md).
+and [platform details](docs/testing/test-platform.md). The post-release
+[0.0.4-alpha.1 parser-hardening report](docs/testing/v0.0.4-alpha.1/2026-11-25-parser-hardening-test-report.md)
+records the dedicated long-option test suite, and the
+[0.0.4-alpha.2 CJK-width report](docs/testing/v0.0.4-alpha.2/2026-11-25-cjk-display-width-test-report.md)
+records terminal cell-width coverage.
 
 Besides the standard library, only a few POSIX interfaces are used:
 core uses `pwd.h` (the home directory), `fnmatch.h` (wildcard matching in
@@ -67,8 +71,10 @@ mxplorer/
 ├── packaging/                # static build + deb packaging
 │   ├── build_static.sh       # pinned Alpine/musl toolchain, build and ctest
 │   └── build_deb.sh          # deb + static tarball
-└── tests/                    # all six suites are driven by ctest
+└── tests/                    # all eight suites are driven by ctest
     ├── smoke_test.sh         # end-to-end check of the terminal front-end
+    ├── text_width_test.cpp   # locale-aware terminal cell width
+    ├── options_test.cpp      # short/long parser grammar and error data
     ├── completion_test.cpp   # command, path and option completion
     ├── completion_pty_test.cpp # real Tab key through a pseudo-terminal
     ├── core_search_test.cpp  # deterministic search cancellation checks
@@ -83,7 +89,7 @@ Interactive mode
 
 ```
 $ ./build/musl/build/cli/mxplorer
-mxplorer 0.0.4-alpha.1 | type 'help' for commands, Tab completes, 'exit' to quit
+mxplorer 0.0.4-alpha.2 | type 'help' for commands, Tab completes, 'exit' to quit
 mxplorer:~$ cd mxplorer
 mxplorer:~/mxplorer$ ls
 ...
@@ -135,18 +141,19 @@ yet; piped/non-terminal input keeps the old line-oriented behaviour.
 
 ```sh
 ./packaging/build_deb.sh
-# ==> dist/Mxplorer-0.0.4-alpha.1-amd64.deb
-# ==> dist/Mxplorer-0.0.4-alpha.1-linux-amd64-static.tar.gz
+# ==> dist/Mxplorer-0.0.4-alpha.2-amd64.deb
+# ==> dist/Mxplorer-0.0.4-alpha.2-linux-amd64-static.tar.gz
 ```
 
 | System | Installation |
 | --- | --- |
-| Debian 8+ | `sudo apt-get install ./dist/Mxplorer-0.0.4-alpha.1-amd64.deb` |
-| Debian 7.11 (old apt) | `sudo dpkg -i ./dist/Mxplorer-0.0.4-alpha.1-amd64.deb` |
-| Other distributions | extract `Mxplorer-0.0.4-alpha.1-linux-amd64-static.tar.gz` and run `usr/bin/mxplorer` |
+| Debian 8+ | `sudo apt-get install ./dist/Mxplorer-0.0.4-alpha.2-amd64.deb` |
+| Debian 7.11 (old apt) | `sudo dpkg -i ./dist/Mxplorer-0.0.4-alpha.2-amd64.deb` |
+| Other distributions | extract `Mxplorer-0.0.4-alpha.2-linux-amd64-static.tar.gz` and run `usr/bin/mxplorer` |
 
-0.0.4-alpha.1 adds precise double-dash long options, long-option Tab
-completion, `--name=value` syntax and the `--` option terminator. The latest
+0.0.4-alpha.2 keeps the precise double-dash long options from alpha.1 and fixes
+mixed ASCII/CJK column alignment, line-editor cursor movement and completion
+layout by measuring terminal cells instead of UTF-8 bytes. The latest
 fully verified release is still 0.0.3-alpha.2; the Debian 7.11-13.7 and
 forky/sid amd64 compatibility matrix for that baseline is recorded in the
 [compatibility report](docs/testing/v0.0.3-alpha.2/2026-10-20-compatibility-test-report.md).
@@ -234,9 +241,10 @@ detailed info, copy, move, remove, mkdir, directory tree, search by name or
 content (glob / substring / regex, with type, depth, size and age filters,
 several roots at once), progress display, cancellation, error classification,
 interactive line editing with Tab completion for commands, paths and short or
-long options, and six test suites (a shell smoke test, a real-PTY completion
-test, completion-engine checks, core copy-atomicity checks, search-cancellation
-checks and unit checks for the pure helpers).
+long options, and eight test suites (a shell smoke test, a real-PTY completion
+test, terminal text-width checks, option-parser checks, completion-engine checks,
+core copy-atomicity checks, search-cancellation checks and unit checks for the
+pure helpers).
 The Qt6 front end does not exist yet; the terminal is the only interface.
 
 Behavior worth knowing about:
