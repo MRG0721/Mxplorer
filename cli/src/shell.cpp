@@ -6,6 +6,7 @@
 #include "completion.hpp"
 #include "line_editor.hpp"
 #include "options.hpp"
+#include "terminal_text_width.hpp"
 #include "mxplorer/directory.hpp"
 #include "mxplorer/entry.hpp"
 #include "mxplorer/operations.hpp"
@@ -112,21 +113,6 @@ std::size_t terminal_width(int fd = STDOUT_FILENO)
         return size.ws_col;
     }
     return 80;
-}
-
-/// Counts UTF-8 lead bytes only, which is a good enough approximation for
-/// column alignment of mixed ASCII/CJK names.
-std::size_t display_width(const std::string& text)
-{
-    std::size_t width = 0;
-    for (const unsigned char byte : text)
-    {
-        if ((byte & 0xC0) != 0x80)
-        {
-            ++width;
-        }
-    }
-    return width;
 }
 
 /// Splits a line into arguments. Supports 'single' and "double" quotes and
@@ -278,16 +264,9 @@ public:
         const std::size_t width = terminal_width(STDERR_FILENO);
         const std::size_t fixed = std::string("searching ").size() + counters.size();
         const std::size_t room = width > fixed + 8 ? width - fixed : 16;
-        if (directory.size() > room)
+        if (terminal_text_width(directory) > room)
         {
-            std::size_t start = directory.size() - room;
-            // Never cut a UTF-8 sequence in half.
-            while (start < directory.size() &&
-                   (static_cast<unsigned char>(directory[start]) & 0xC0) == 0x80)
-            {
-                ++start;
-            }
-            directory = "..." + directory.substr(start);
+            directory = terminal_ellipsize_left(directory, room);
         }
 
         std::string line = "searching " + directory + counters;
@@ -337,7 +316,7 @@ void print_short_listing(const std::vector<FileEntry>& entries)
             label += '@';
             decorated = paint(label, kCyan);
         }
-        name_width = std::max(name_width, display_width(label));
+        name_width = std::max(name_width, terminal_text_width(label));
         plain.push_back(std::move(label));
         coloured.push_back(std::move(decorated));
     }
@@ -361,7 +340,7 @@ void print_short_listing(const std::vector<FileEntry>& entries)
             const std::size_t next = (column + 1) * rows + row;
             if (column + 1 < columns && next < plain.size())
             {
-                const std::size_t padding = column_width - display_width(plain[index]);
+                const std::size_t padding = column_width - terminal_text_width(plain[index]);
                 std::cout << std::string(padding, ' ');
             }
         }
