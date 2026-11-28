@@ -1,5 +1,19 @@
 mxplorer (@VERSION@) unstable; urgency=low
 
+  * Readability and maintainability update; this release adds no user-facing
+    features and makes no intentional runtime behavior changes.
+  * Share compiler warning configuration across core, CLI and test targets.
+  * Centralize UTF-8 sequence and character-boundary handling.
+  * Clarify CLI option parsing, copy/move dispatch, sparse-copy outcomes,
+    search filtering and natural-order number comparison.
+  * Add matching English and Chinese code-reading paths.
+  * Eight ctest suites pass all 343 checks under Debug, ASan+UBSan and the
+    fixed Alpine/musl static build.
+
+ -- MRG0721 <271227737+MRG0721@users.noreply.github.com>  @DATE@
+
+mxplorer (0.0.4-alpha.2) unstable; urgency=low
+
   * Fix mixed ASCII/CJK column alignment by measuring terminal cells rather
     than UTF-8 bytes.
   * Correct line-editor cursor movement and completion candidate wrapping for

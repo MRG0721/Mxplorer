@@ -28,7 +28,8 @@
 
 二进制把 musl、libstdc++ 与 libgcc 一起装进自身，运行时没有任何动态库依赖。
 `ctest` 会在静态二进制上运行 `core_operations`、`core_utils`、`core_search`、
-`cli_options`、`cli_completion`、`cli_completion_pty` 与 `cli_smoke`。测试资料位于
+`cli_text_width`、`cli_options`、`cli_completion`、`cli_completion_pty` 与
+`cli_smoke`。测试资料位于
 `docs/testing/`，包括
 [0.0.3-alpha.2 兼容性报告](docs/testing/v0.0.3-alpha.2/2026-10-20-compatibility-test-report.md)
 与[测试平台说明](docs/testing/test-platform.md)。发布后的
@@ -61,7 +62,7 @@ mxplorer/
 │   │   └── session.hpp       # 当前目录状态、把用户输入解析成绝对路径
 │   └── src/
 ├── cli/                      # 终端前端：解析命令行、打印结果、渲染进度
-│   └── src/{main,shell,completion,line_editor}.cpp
+│   └── src/{main,shell,options,completion,line_editor,terminal_text_width}.cpp
 ├── packaging/                # 静态构建 + deb 打包
 │   ├── build_static.sh       # 固定 Alpine/musl 工具链、构建与 ctest
 │   └── build_deb.sh          # deb 与静态 tar.gz
@@ -76,13 +77,26 @@ mxplorer/
     └── core_utils_test.cpp   # 纯函数检查：折叠、路径、排序、错误
 ```
 
+## 阅读代码的路径
+
+依赖方向始终是单向的：`main -> CLI -> core`。建议按下面的顺序阅读：
+
+1. 先读 `core/include/mxplorer/error.hpp`，再读 `entry.hpp` 和 `directory.hpp`，
+   理解值类型与错误模型。
+2. 读 `path_utils.hpp` 和 `session.hpp`，理解 UTF-8 路径与目录导航。
+3. 读 `operations.cpp`，学习临时文件、staging 树、元数据与取消如何协作。
+4. 读 `search.cpp`，跟踪显式栈遍历与流式结果。
+5. 依次读 `cli/src/options.cpp`、`completion.cpp`、`line_editor.cpp`，最后读
+   `shell.cpp`，看终端层如何建立在 core 之上。
+6. 最后读 `tests/` 和 `tests/smoke_test.sh`，确认每一层承诺的行为如何被验证。
+
 ## 用法
 
 交互模式（提示符显示当前目录，`cd` 状态会保持）：
 
 ```
 $ ./build/musl/build/cli/mxplorer
-mxplorer 0.0.4-alpha.2 | type 'help' for commands, Tab completes, 'exit' to quit
+mxplorer 0.0.4-alpha.3 | type 'help' for commands, Tab completes, 'exit' to quit
 mxplorer:~$ cd mxplorer
 mxplorer:~/mxplorer$ ls
 ...
@@ -130,19 +144,19 @@ Home/End、退格、Delete、Ctrl-A/E/B/F/U/K 与 Ctrl-W。目前没有持久化
 
 ```sh
 ./packaging/build_deb.sh
-# ==> dist/Mxplorer-0.0.4-alpha.2-amd64.deb
-# ==> dist/Mxplorer-0.0.4-alpha.2-linux-amd64-static.tar.gz
+# ==> dist/Mxplorer-0.0.4-alpha.3-amd64.deb
+# ==> dist/Mxplorer-0.0.4-alpha.3-linux-amd64-static.tar.gz
 ```
 
 | 系统 | 安装方式 |
 | --- | --- |
-| Debian 8+ | `sudo apt-get install ./dist/Mxplorer-0.0.4-alpha.2-amd64.deb` |
-| Debian 7.11（旧 apt） | `sudo dpkg -i ./dist/Mxplorer-0.0.4-alpha.2-amd64.deb` |
-| 其他发行版 | 解包 `Mxplorer-0.0.4-alpha.2-linux-amd64-static.tar.gz`，运行 `usr/bin/mxplorer` |
+| Debian 8+ | `sudo apt-get install ./dist/Mxplorer-0.0.4-alpha.3-amd64.deb` |
+| Debian 7.11（旧 apt） | `sudo dpkg -i ./dist/Mxplorer-0.0.4-alpha.3-amd64.deb` |
+| 其他发行版 | 解包 `Mxplorer-0.0.4-alpha.3-linux-amd64-static.tar.gz`，运行 `usr/bin/mxplorer` |
 
-0.0.4-alpha.2 保留 alpha.1 的双横线长选项，并改用终端单元格而非 UTF-8 字节
-计算宽度，修正 ASCII/CJK 混合多列对齐、行编辑器光标移动和补全候选布局。
-最新完整验证版本仍是 0.0.3-alpha.2；该基线的
+0.0.4-alpha.3 是可读性与可维护性更新，没有新增用户功能，也没有有意改变
+运行时行为。alpha.2 的命令集和 CJK 终端布局保持不变，core、CLI、构建配置和
+测试改用更清晰的共享抽象。最新完整验证版本仍是 0.0.3-alpha.2；该基线的
 Debian 7.11–13.7 与 forky/sid amd64 兼容性矩阵记录在
 [兼容性报告](docs/testing/v0.0.3-alpha.2/2026-10-20-compatibility-test-report.md)。
 

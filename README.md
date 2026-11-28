@@ -32,8 +32,9 @@ toolchain packages; later runs use the cache and work offline.
 
 The binary carries musl, libstdc++ and libgcc inside itself, so it has no
 runtime library dependencies. `ctest` runs `core_operations`, `core_utils`,
-`core_search`, `cli_options`, `cli_completion`, `cli_completion_pty` and
-`cli_smoke` against the static binaries. Testing records are in `docs/testing/`, including the
+`core_search`, `cli_text_width`, `cli_options`, `cli_completion`,
+`cli_completion_pty` and `cli_smoke` against the static binaries. Testing
+records are in `docs/testing/`, including the
 [0.0.3-alpha.2 compatibility report](docs/testing/v0.0.3-alpha.2/2026-10-20-compatibility-test-report.md)
 and [platform details](docs/testing/test-platform.md). The post-release
 [0.0.4-alpha.1 parser-hardening report](docs/testing/v0.0.4-alpha.1/2026-11-25-parser-hardening-test-report.md)
@@ -67,7 +68,7 @@ mxplorer/
 │   │   └── session.hpp       # current-directory state, parses user input into absolute paths
 │   └── src/
 ├── cli/                      # terminal frontend: parses the command line, prints results, renders progress
-│   └── src/{main,shell,completion,line_editor}.cpp
+│   └── src/{main,shell,options,completion,line_editor,terminal_text_width}.cpp
 ├── packaging/                # static build + deb packaging
 │   ├── build_static.sh       # pinned Alpine/musl toolchain, build and ctest
 │   └── build_deb.sh          # deb + static tarball
@@ -82,6 +83,21 @@ mxplorer/
     └── core_utils_test.cpp   # pure helpers: folding, paths, ordering, errors
 ```
 
+## Reading the code
+
+The dependency direction is intentionally one-way: `main -> CLI -> core`.
+A practical reading order is:
+
+1. `core/include/mxplorer/error.hpp`, then `entry.hpp` and `directory.hpp`, to
+   learn the value types and error model.
+2. `path_utils.hpp` and `session.hpp`, to understand UTF-8 paths and navigation.
+3. `operations.cpp`, to study temporary files, staging trees, metadata and
+   cancellation.
+4. `search.cpp`, to follow the iterative tree walk and streamed results.
+5. `cli/src/options.cpp`, `completion.cpp`, `line_editor.cpp`, then
+   `shell.cpp`, to see terminal concerns built on top of the core.
+6. `tests/` and `tests/smoke_test.sh`, to see which behavior each layer promises.
+
 ## Usage
 
 Interactive mode
@@ -89,7 +105,7 @@ Interactive mode
 
 ```
 $ ./build/musl/build/cli/mxplorer
-mxplorer 0.0.4-alpha.2 | type 'help' for commands, Tab completes, 'exit' to quit
+mxplorer 0.0.4-alpha.3 | type 'help' for commands, Tab completes, 'exit' to quit
 mxplorer:~$ cd mxplorer
 mxplorer:~/mxplorer$ ls
 ...
@@ -141,20 +157,21 @@ yet; piped/non-terminal input keeps the old line-oriented behaviour.
 
 ```sh
 ./packaging/build_deb.sh
-# ==> dist/Mxplorer-0.0.4-alpha.2-amd64.deb
-# ==> dist/Mxplorer-0.0.4-alpha.2-linux-amd64-static.tar.gz
+# ==> dist/Mxplorer-0.0.4-alpha.3-amd64.deb
+# ==> dist/Mxplorer-0.0.4-alpha.3-linux-amd64-static.tar.gz
 ```
 
 | System | Installation |
 | --- | --- |
-| Debian 8+ | `sudo apt-get install ./dist/Mxplorer-0.0.4-alpha.2-amd64.deb` |
-| Debian 7.11 (old apt) | `sudo dpkg -i ./dist/Mxplorer-0.0.4-alpha.2-amd64.deb` |
-| Other distributions | extract `Mxplorer-0.0.4-alpha.2-linux-amd64-static.tar.gz` and run `usr/bin/mxplorer` |
+| Debian 8+ | `sudo apt-get install ./dist/Mxplorer-0.0.4-alpha.3-amd64.deb` |
+| Debian 7.11 (old apt) | `sudo dpkg -i ./dist/Mxplorer-0.0.4-alpha.3-amd64.deb` |
+| Other distributions | extract `Mxplorer-0.0.4-alpha.3-linux-amd64-static.tar.gz` and run `usr/bin/mxplorer` |
 
-0.0.4-alpha.2 keeps the precise double-dash long options from alpha.1 and fixes
-mixed ASCII/CJK column alignment, line-editor cursor movement and completion
-layout by measuring terminal cells instead of UTF-8 bytes. The latest
-fully verified release is still 0.0.3-alpha.2; the Debian 7.11-13.7 and
+0.0.4-alpha.3 is a readability and maintainability update. It adds no
+user-facing features and makes no intentional runtime behavior changes. The
+command set and CJK-aware terminal layout from alpha.2 remain intact while the
+core, CLI, build configuration and tests use clearer shared abstractions. The
+latest fully verified release is still 0.0.3-alpha.2; the Debian 7.11-13.7 and
 forky/sid amd64 compatibility matrix for that baseline is recorded in the
 [compatibility report](docs/testing/v0.0.3-alpha.2/2026-10-20-compatibility-test-report.md).
 
