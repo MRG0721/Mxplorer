@@ -20,9 +20,11 @@ namespace
 
 namespace fs = std::filesystem;
 
-constexpr std::size_t kProgressStep = 512;
+constexpr std::size_t kSearchProgressEntryStep = 512;
 constexpr std::size_t kMaxSkippedListed = 8;
-constexpr std::size_t kContentChunk = 64ULL * 1024;
+constexpr std::size_t kContentChunkSize = 64ULL * 1024;
+constexpr std::size_t kMaxFoldExpansion = 8;
+constexpr std::size_t kMinimumContentOverlap = 64;
 
 bool contains_wildcard(const std::string& pattern)
 {
@@ -53,7 +55,7 @@ std::string fold_regex_pattern(std::string_view pattern)
         // multi-byte) without touching them.
         std::size_t length = 2;
         while (index + length < pattern.size() &&
-               (static_cast<unsigned char>(pattern[index + length]) & 0xC0) == 0x80)
+               is_utf8_continuation(static_cast<unsigned char>(pattern[index + length])))
         {
             ++length;
         }
@@ -105,9 +107,9 @@ Error file_contains(const fs::path& path, const std::string& text, bool case_sen
 
     // A match must fit into the retained window even when folding changes the
     // byte length, so keep a generous amount of raw bytes between chunks.
-    const std::size_t overlap = 8 * needle.size() + 64;
+    const std::size_t overlap = (kMaxFoldExpansion * needle.size()) + kMinimumContentOverlap;
 
-    std::vector<char> buffer(kContentChunk);
+    std::vector<char> buffer(kContentChunkSize);
     std::string window;
     while (true)
     {
@@ -134,7 +136,7 @@ Error file_contains(const fs::path& path, const std::string& text, bool case_sen
                     // Never start the folded window in the middle of a
                     // multi-byte character.
                     while (start < window.size() &&
-                           (static_cast<unsigned char>(window[start]) & 0xC0) == 0x80)
+                           is_utf8_continuation(static_cast<unsigned char>(window[start])))
                     {
                         ++start;
                     }
@@ -160,7 +162,7 @@ Error file_contains(const fs::path& path, const std::string& text, bool case_sen
 class NameMatcher
 {
 public:
-    static Error build(const SearchOptions& options, NameMatcher& matcher);
+    static Result<NameMatcher> build(const SearchOptions& options);
     bool matches(const std::string& name) const;
 
 private:
@@ -170,8 +172,9 @@ private:
     std::regex regex_{};
 };
 
-Error NameMatcher::build(const SearchOptions& options, NameMatcher& matcher)
+Result<NameMatcher> NameMatcher::build(const SearchOptions& options)
 {
+    NameMatcher matcher;
     matcher.mode_ = options.mode;
     matcher.case_sensitive_ = options.case_sensitive;
     matcher.pattern_ = options.pattern;
@@ -196,17 +199,17 @@ Error NameMatcher::build(const SearchOptions& options, NameMatcher& matcher)
                                                               options.pattern +
                                                               "': " + error.what());
             }
-            return Error{};
+            return matcher;
         }
-        case MatchMode::substring: return Error{};
+        case MatchMode::substring: return matcher;
         case MatchMode::glob:
             if (options.implicit_substring && !contains_wildcard(matcher.pattern_))
             {
                 matcher.pattern_ = "*" + matcher.pattern_ + "*";
             }
-            return Error{};
+            return matcher;
     }
-    return Error{};
+    return matcher;
 }
 
 bool NameMatcher::matches(const std::string& name) const
@@ -238,6 +241,55 @@ std::chrono::seconds age_of(const FileEntry& entry, std::filesystem::file_time_t
     return std::chrono::duration_cast<std::chrono::seconds>(age);
 }
 
+bool passes_metadata_filters(const FileEntry& entry, const SearchOptions& options,
+                             std::filesystem::file_time_type now)
+{
+    const bool needs_metadata = options.size_greater_than.has_value() ||
+                                options.size_less_than.has_value() ||
+                                options.older_than.has_value() || options.newer_than.has_value();
+    if (!needs_metadata)
+    {
+        return true;
+    }
+    if (!entry.has_metadata)
+    {
+        return false;
+    }
+    if (options.size_greater_than && entry.size <= *options.size_greater_than)
+    {
+        return false;
+    }
+    if (options.size_less_than && entry.size >= *options.size_less_than)
+    {
+        return false;
+    }
+    if (!entry.has_modified && (options.older_than || options.newer_than))
+    {
+        return false;
+    }
+    if (options.older_than || options.newer_than)
+    {
+        const std::chrono::seconds age = age_of(entry, now);
+        if (options.older_than && age < *options.older_than)
+        {
+            return false;
+        }
+        if (options.newer_than && age > *options.newer_than)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+void record_problem(SearchReport& report, const Error& error)
+{
+    if (report.skipped.size() < kMaxSkippedListed)
+    {
+        report.skipped.push_back(error);
+    }
+}
+
 /// Walks one root. Only a problem with the root itself is a hard error;
 /// unreadable subdirectories and entries are recorded and the walk continues.
 Error walk_root(const fs::path& root, const SearchOptions& options, const NameMatcher& matcher,
@@ -245,55 +297,6 @@ Error walk_root(const fs::path& root, const SearchOptions& options, const NameMa
                 const std::function<void(bool)>& publish)
 {
     const auto now = fs::file_time_type::clock::now();
-
-    const auto record_problem = [&report](const Error& error)
-    {
-        if (report.skipped.size() < kMaxSkippedListed)
-        {
-            report.skipped.push_back(error);
-        }
-    };
-
-    const bool has_metadata_filters =
-        options.size_greater_than.has_value() || options.size_less_than.has_value() ||
-        options.older_than.has_value() || options.newer_than.has_value();
-
-    const auto passes_metadata_filters = [&](const FileEntry& entry)
-    {
-        if (!has_metadata_filters)
-        {
-            return true;
-        }
-        if (!entry.has_metadata)
-        {
-            return false;
-        }
-        if (options.size_greater_than && entry.size <= *options.size_greater_than)
-        {
-            return false;
-        }
-        if (options.size_less_than && entry.size >= *options.size_less_than)
-        {
-            return false;
-        }
-        if (!entry.has_modified && (options.older_than || options.newer_than))
-        {
-            return false;
-        }
-        if (options.older_than || options.newer_than)
-        {
-            const std::chrono::seconds age = age_of(entry, now);
-            if (options.older_than && age < *options.older_than)
-            {
-                return false;
-            }
-            if (options.newer_than && age > *options.newer_than)
-            {
-                return false;
-            }
-        }
-        return true;
-    };
 
     // Iterative depth first walk. A directory is stored together with its own
     // depth; children are pushed in reverse so that they pop in the sorted
@@ -312,7 +315,7 @@ Error walk_root(const fs::path& root, const SearchOptions& options, const NameMa
         list_options.on_entry_error = [&](const Error& error)
         {
             ++report.unreadable_entries;
-            record_problem(error);
+            record_problem(report, error);
         };
 
         const Result<std::vector<FileEntry>> listing = list_directory(directory, list_options);
@@ -327,7 +330,7 @@ Error walk_root(const fs::path& root, const SearchOptions& options, const NameMa
             // An unreadable directory is reported, never silently treated as an
             // empty one, but it does not abort the whole search.
             ++report.unreadable;
-            record_problem(listing.error());
+            record_problem(report, listing.error());
             continue;
         }
 
@@ -348,7 +351,7 @@ Error walk_root(const fs::path& root, const SearchOptions& options, const NameMa
             bool matched = in_range && passes_filter(entry, options.filter) &&
                            matcher.matches(entry.name) &&
                            (!options.extra_filter || options.extra_filter(entry)) &&
-                           passes_metadata_filters(entry);
+                           passes_metadata_filters(entry, options, now);
 
             if (matched && !options.content_pattern.empty())
             {
@@ -375,7 +378,7 @@ Error walk_root(const fs::path& root, const SearchOptions& options, const NameMa
                         }
                         matched = false;
                         ++report.unreadable_entries;
-                        record_problem(error);
+                        record_problem(report, error);
                     }
                     else
                     {
@@ -430,16 +433,16 @@ Error walk_root(const fs::path& root, const SearchOptions& options, const NameMa
 
 Error validate_search_options(const SearchOptions& options)
 {
-    NameMatcher matcher;
-    return NameMatcher::build(options, matcher);
+    const Result<NameMatcher> matcher = NameMatcher::build(options);
+    return matcher.ok() ? Error{} : matcher.error();
 }
 
 Result<SearchReport> search(const std::vector<fs::path>& roots, const SearchOptions& options)
 {
-    NameMatcher matcher;
-    if (const Error error = NameMatcher::build(options, matcher); !error.ok())
+    const Result<NameMatcher> matcher = NameMatcher::build(options);
+    if (!matcher.ok())
     {
-        return error;
+        return matcher.error();
     }
     if (roots.empty())
     {
@@ -477,7 +480,7 @@ Result<SearchReport> search(const std::vector<fs::path>& roots, const SearchOpti
         {
             return;
         }
-        if (!force && progress.entries - reported_entries < kProgressStep)
+        if (!force && progress.entries - reported_entries < kSearchProgressEntryStep)
         {
             return;
         }
@@ -487,7 +490,8 @@ Result<SearchReport> search(const std::vector<fs::path>& roots, const SearchOpti
 
     for (const fs::path& root : roots)
     {
-        if (const Error error = walk_root(root, options, matcher, report, progress, publish);
+        if (const Error error =
+                walk_root(root, options, matcher.value(), report, progress, publish);
             !error.ok())
         {
             return error;

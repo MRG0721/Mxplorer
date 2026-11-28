@@ -31,13 +31,24 @@ namespace
 
 namespace fs = std::filesystem;
 
-constexpr std::size_t kChunkSize = 64ULL * 1024;
-constexpr std::uintmax_t kProgressStep = 1024ULL * 1024;
+constexpr std::size_t kCopyChunkSize = 64ULL * 1024;
+constexpr std::uintmax_t kProgressByteStep = 1024ULL * 1024;
+constexpr int kMaxTemporaryNameAttempts = 128;
+constexpr unsigned int kNewFileMode = 0666;
+constexpr unsigned int kNewStagingDirectoryMode = 0777;
+constexpr unsigned int kPermissionBits = 07777;
+constexpr std::uintmax_t kStatIoBlockSize = 512;
 
 struct TreeStats
 {
     std::size_t items = 0;
     std::uintmax_t bytes = 0;
+};
+
+enum class SparseCopyOutcome
+{
+    completed,
+    use_sequential_copy,
 };
 
 /// Lives for the duration of one operation and turns the low level events into
@@ -88,7 +99,7 @@ private:
         {
             return;
         }
-        if (!force && bytes_ - last_bytes_ < kProgressStep && items_ == last_items_)
+        if (!force && bytes_ - last_bytes_ < kProgressByteStep && items_ == last_items_)
         {
             return;
         }
@@ -396,13 +407,14 @@ Error create_temp_file(const fs::path& destination, fs::path& temp_path, int& de
     const fs::path directory = parent_or_dot(destination);
     const std::string name = to_utf8(destination.filename());
 
-    for (int attempt = 0; attempt < 128; ++attempt)
+    for (int attempt = 0; attempt < kMaxTemporaryNameAttempts; ++attempt)
     {
         const unsigned long counter = g_temp_counter.fetch_add(1);
         const fs::path candidate =
             directory / from_utf8(std::format(".{}.mxplorer-partial.{}.{}", name,
                                               static_cast<long>(::getpid()), counter));
-        const int fd = ::open(candidate.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0666);
+        const int fd =
+            ::open(candidate.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, kNewFileMode);
         if (fd >= 0)
         {
             temp_path = candidate;
@@ -426,13 +438,13 @@ Error create_temp_directory(const fs::path& destination, fs::path& temp_path)
     const fs::path directory = parent_or_dot(destination);
     const std::string name = to_utf8(destination.filename());
 
-    for (int attempt = 0; attempt < 128; ++attempt)
+    for (int attempt = 0; attempt < kMaxTemporaryNameAttempts; ++attempt)
     {
         const unsigned long counter = g_temp_counter.fetch_add(1);
         const fs::path candidate =
             directory / from_utf8(std::format(".{}.mxplorer-partial.{}.{}", name,
                                               static_cast<long>(::getpid()), counter));
-        if (::mkdir(candidate.c_str(), 0777) == 0)
+        if (::mkdir(candidate.c_str(), kNewStagingDirectoryMode) == 0)
         {
             temp_path = candidate;
             return Error{};
@@ -446,10 +458,10 @@ Error create_temp_directory(const fs::path& destination, fs::path& temp_path)
                  destination);
 }
 
-/// Copies "user.*" and "system.*" attributes; on Linux the ACLs are stored in
-/// the system.posix_acl_* attributes, so they travel with the rest. Privileged
-/// namespaces (security.*, trusted.*) may refuse to be written by an
-/// unprivileged process; that is a best-effort failure by design.
+/// Copies all extended attributes it can read and write. On Linux, ACLs live
+/// in system.posix_acl_* attributes. Privileged namespaces such as security.*
+/// and trusted.* may reject an unprivileged writer; those failures are
+/// deliberately best-effort.
 void copy_xattrs(const fs::path& source, const fs::path& destination)
 {
     ssize_t size = ::llistxattr(source.c_str(), nullptr, 0);
@@ -509,7 +521,7 @@ Error copy_metadata(const fs::path& source, const fs::path& destination, const s
 
     if (!is_symlink)
     {
-        if (::chmod(destination.c_str(), info.st_mode & 07777) != 0)
+        if (::chmod(destination.c_str(), info.st_mode & kPermissionBits) != 0)
         {
             return error_from_errno(errno, destination);
         }
@@ -521,10 +533,10 @@ Error copy_metadata(const fs::path& source, const fs::path& destination, const s
 /// Copies [begin, end) from one descriptor to another. Cancellation is checked
 /// once per chunk, which keeps a long copy interruptible without slowing the
 /// common path down.
-Error copy_range(int input, int output, std::uintmax_t begin, std::uintmax_t end,
+Error copy_range(int input_fd, int output_fd, std::uintmax_t begin, std::uintmax_t end,
                  const fs::path& source, const fs::path& destination, ProgressReporter& reporter)
 {
-    std::array<char, kChunkSize> buffer{};
+    std::array<char, kCopyChunkSize> buffer{};
     std::uintmax_t offset = begin;
 
     while (offset < end)
@@ -535,8 +547,8 @@ Error copy_range(int input, int output, std::uintmax_t begin, std::uintmax_t end
         }
 
         const std::size_t wanted =
-            static_cast<std::size_t>(std::min<std::uintmax_t>(kChunkSize, end - offset));
-        const ssize_t read = ::pread(input, buffer.data(), wanted, static_cast<off_t>(offset));
+            static_cast<std::size_t>(std::min<std::uintmax_t>(kCopyChunkSize, end - offset));
+        const ssize_t read = ::pread(input_fd, buffer.data(), wanted, static_cast<off_t>(offset));
         if (read < 0)
         {
             return error_from_errno(errno, source);
@@ -549,9 +561,9 @@ Error copy_range(int input, int output, std::uintmax_t begin, std::uintmax_t end
         ssize_t written = 0;
         while (written < read)
         {
-            const ssize_t count =
-                ::pwrite(output, buffer.data() + written, static_cast<std::size_t>(read - written),
-                         static_cast<off_t>(offset + static_cast<std::uintmax_t>(written)));
+            const ssize_t count = ::pwrite(
+                output_fd, buffer.data() + written, static_cast<std::size_t>(read - written),
+                static_cast<off_t>(offset + static_cast<std::uintmax_t>(written)));
             if (count < 0)
             {
                 return error_from_errno(errno, destination);
@@ -565,10 +577,77 @@ Error copy_range(int input, int output, std::uintmax_t begin, std::uintmax_t end
     return Error{};
 }
 
+/// Copies only the data extents of a sparse file. The outcome is `completed`
+/// when all logical bytes were accounted for. If the file system does not
+/// support SEEK_DATA/SEEK_HOLE, the caller is asked to copy sequentially.
+Result<SparseCopyOutcome> copy_sparse_ranges(int input_fd, int output_fd, std::uintmax_t size,
+                                             const fs::path& source, const fs::path& destination,
+                                             ProgressReporter& reporter)
+{
+    std::uintmax_t offset = 0;
+    while (offset < size)
+    {
+        errno = 0;
+        const off_t data = ::lseek(input_fd, static_cast<off_t>(offset), SEEK_DATA);
+        if (data < 0)
+        {
+            if (errno == ENXIO)
+            {
+                reporter.add_bytes(size - offset);
+                return SparseCopyOutcome::completed;
+            }
+            if (errno == EINVAL || errno == ENOTSUP)
+            {
+                return SparseCopyOutcome::use_sequential_copy;
+            }
+            return error_from_errno(errno, source);
+        }
+
+        const off_t hole = ::lseek(input_fd, data, SEEK_HOLE);
+        if (hole < 0)
+        {
+            if (errno == EINVAL || errno == ENOTSUP)
+            {
+                return SparseCopyOutcome::use_sequential_copy;
+            }
+            return error_from_errno(errno, source);
+        }
+
+        const std::uintmax_t data_offset = static_cast<std::uintmax_t>(data);
+        const std::uintmax_t hole_offset =
+            std::min<std::uintmax_t>(static_cast<std::uintmax_t>(hole), size);
+        if (data_offset >= size)
+        {
+            reporter.add_bytes(size - offset);
+            return SparseCopyOutcome::completed;
+        }
+        if (hole_offset <= data_offset)
+        {
+            // The extent map is inconsistent. Prefer a normal sequential copy
+            // over trusting a nonsensical data range.
+            return SparseCopyOutcome::use_sequential_copy;
+        }
+
+        // A hole counts toward logical progress even though it is not written.
+        if (data_offset > offset)
+        {
+            reporter.add_bytes(data_offset - offset);
+        }
+        const Error result = copy_range(input_fd, output_fd, data_offset, hole_offset, source,
+                                        destination, reporter);
+        if (!result.ok())
+        {
+            return result;
+        }
+        offset = hole_offset;
+    }
+    return SparseCopyOutcome::completed;
+}
+
 /// Copies a regular file's data. Sparse files are detected with SEEK_DATA /
 /// SEEK_HOLE and their holes are left unwritten, so a sparse source produces a
 /// sparse destination instead of a mountain of zeroes.
-Error copy_file_contents(const fs::path& source, int output, const fs::path& destination,
+Error copy_file_contents(const fs::path& source, int output_fd, const fs::path& destination,
                          ProgressReporter& reporter)
 {
     const int input = ::open(source.c_str(), O_RDONLY | O_CLOEXEC);
@@ -585,95 +664,32 @@ Error copy_file_contents(const fs::path& source, int output, const fs::path& des
     }
     const std::uintmax_t size = info.st_size > 0 ? static_cast<std::uintmax_t>(info.st_size) : 0;
 
-    const bool maybe_sparse = size > 0 && static_cast<std::uintmax_t>(info.st_blocks) * 512 < size;
-    bool copied_sparse = false;
+    const bool maybe_sparse =
+        size > 0 && static_cast<std::uintmax_t>(info.st_blocks) * kStatIoBlockSize < size;
+    bool use_sequential_copy = true;
 
     if (maybe_sparse)
     {
-        bool fallback = false;
-        std::uintmax_t offset = 0;
-        while (offset < size)
+        const Result<SparseCopyOutcome> sparse_result =
+            copy_sparse_ranges(input, output_fd, size, source, destination, reporter);
+        if (!sparse_result.ok())
         {
-            errno = 0;
-            const off_t data = ::lseek(input, static_cast<off_t>(offset), SEEK_DATA);
-            if (data < 0)
-            {
-                if (errno == ENXIO)
-                {
-                    // Everything from "offset" on is a hole.
-                    reporter.add_bytes(size - offset);
-                    offset = size;
-                    break;
-                }
-                if (errno == EINVAL || errno == ENOTSUP)
-                {
-                    fallback = true;
-                    break;
-                }
-                return error_from_errno(errno, source);
-            }
-
-            const off_t hole = ::lseek(input, data, SEEK_HOLE);
-            if (hole < 0)
-            {
-                if (errno == EINVAL || errno == ENOTSUP)
-                {
-                    fallback = true;
-                    break;
-                }
-                return error_from_errno(errno, source);
-            }
-
-            const std::uintmax_t data_offset = static_cast<std::uintmax_t>(data);
-            const std::uintmax_t hole_offset =
-                std::min<std::uintmax_t>(static_cast<std::uintmax_t>(hole), size);
-            if (data_offset >= size)
-            {
-                reporter.add_bytes(size - offset);
-                offset = size;
-                break;
-            }
-            if (hole_offset <= data_offset)
-            {
-                // A file system reporting nonsense: redo the copy sequentially
-                // rather than trusting the extent map.
-                fallback = true;
-                break;
-            }
-
-            // A hole contributes to the progress total (which counts logical
-            // bytes) but is not written.
-            if (data_offset > offset)
-            {
-                reporter.add_bytes(data_offset - offset);
-            }
-            const Error result =
-                copy_range(input, output, data_offset, hole_offset, source, destination, reporter);
-            if (!result.ok())
-            {
-                return result;
-            }
-            offset = hole_offset;
+            return sparse_result.error();
         }
-
-        if (!fallback && offset >= size)
+        use_sequential_copy = sparse_result.value() == SparseCopyOutcome::use_sequential_copy;
+        if (use_sequential_copy)
         {
-            copied_sparse = true;
-        }
-        else if (fallback)
-        {
-            // Some file systems do not implement SEEK_DATA; start over with a
-            // plain sequential copy.
-            if (::ftruncate(output, 0) != 0)
+            // A failed sparse attempt may already have written some ranges.
+            if (::ftruncate(output_fd, 0) != 0)
             {
                 return error_from_errno(errno, destination);
             }
         }
     }
 
-    if (!copied_sparse)
+    if (use_sequential_copy)
     {
-        const Error result = copy_range(input, output, 0, size, source, destination, reporter);
+        const Error result = copy_range(input, output_fd, 0, size, source, destination, reporter);
         if (!result.ok())
         {
             return result;
@@ -682,7 +698,7 @@ Error copy_file_contents(const fs::path& source, int output, const fs::path& des
 
     // Sets the logical size for sparse files whose last extent ends early and
     // is a no-op otherwise.
-    if (::ftruncate(output, static_cast<off_t>(size)) != 0)
+    if (::ftruncate(output_fd, static_cast<off_t>(size)) != 0)
     {
         return error_from_errno(errno, destination);
     }
@@ -771,7 +787,7 @@ Error copy_regular_file(const fs::path& source, const fs::path& destination,
 
     if (options.preserve_permissions)
     {
-        if (::fchmod(output.get(), info.st_mode & 07777) != 0)
+        if (::fchmod(output.get(), info.st_mode & kPermissionBits) != 0)
         {
             return error_from_errno(errno, temp);
         }

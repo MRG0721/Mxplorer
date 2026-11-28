@@ -3,6 +3,7 @@
 
 #include "mxplorer/path_utils.hpp"
 
+#include <algorithm>
 #include <climits>
 #include <cwchar>
 #include <cwctype>
@@ -23,6 +24,64 @@ std::filesystem::path from_utf8(std::string_view text)
 {
     return std::filesystem::path(
         std::u8string(reinterpret_cast<const char8_t*>(text.data()), text.size()));
+}
+
+bool is_utf8_continuation(unsigned char byte)
+{
+    return (byte & 0xC0) == 0x80;
+}
+
+std::size_t utf8_sequence_length(unsigned char lead_byte)
+{
+    if (lead_byte < 0x80)
+    {
+        return 1;
+    }
+    if (lead_byte >= 0xC2 && lead_byte <= 0xDF)
+    {
+        return 2;
+    }
+    if (lead_byte >= 0xE0 && lead_byte <= 0xEF)
+    {
+        return 3;
+    }
+    if (lead_byte >= 0xF0 && lead_byte <= 0xF4)
+    {
+        return 4;
+    }
+    return 1;
+}
+
+std::size_t previous_utf8_boundary(std::string_view text, std::size_t offset)
+{
+    offset = std::min(offset, text.size());
+    if (offset == 0)
+    {
+        return 0;
+    }
+
+    --offset;
+    while (offset > 0 && is_utf8_continuation(static_cast<unsigned char>(text[offset])))
+    {
+        --offset;
+    }
+    return offset;
+}
+
+std::size_t next_utf8_boundary(std::string_view text, std::size_t offset)
+{
+    offset = std::min(offset, text.size());
+    if (offset == text.size())
+    {
+        return text.size();
+    }
+
+    ++offset;
+    while (offset < text.size() && is_utf8_continuation(static_cast<unsigned char>(text[offset])))
+    {
+        ++offset;
+    }
+    return offset;
 }
 
 std::string fold_case_utf8(std::string_view text)

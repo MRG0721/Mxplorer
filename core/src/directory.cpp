@@ -42,6 +42,58 @@ bool is_hidden_name(const std::string& name)
     return !name.empty() && name.front() == '.' && name != "." && name != "..";
 }
 
+bool is_ascii_digit(char value)
+{
+    return std::isdigit(static_cast<unsigned char>(value)) != 0;
+}
+
+unsigned char ascii_lower(char value)
+{
+    return static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(value)));
+}
+
+/// Compares two digit runs numerically and advances both offsets past them.
+/// Returns zero when the runs are numerically equal.
+int compare_digit_runs(std::string_view left, std::string_view right, std::size_t& left_offset,
+                       std::size_t& right_offset)
+{
+    std::size_t left_end = left_offset;
+    std::size_t right_end = right_offset;
+    while (left_end < left.size() && is_ascii_digit(left[left_end]))
+    {
+        ++left_end;
+    }
+    while (right_end < right.size() && is_ascii_digit(right[right_end]))
+    {
+        ++right_end;
+    }
+
+    std::string_view left_digits = left.substr(left_offset, left_end - left_offset);
+    std::string_view right_digits = right.substr(right_offset, right_end - right_offset);
+    while (left_digits.size() > 1 && left_digits.front() == '0')
+    {
+        left_digits.remove_prefix(1);
+    }
+    while (right_digits.size() > 1 && right_digits.front() == '0')
+    {
+        right_digits.remove_prefix(1);
+    }
+
+    if (left_digits.size() != right_digits.size())
+    {
+        return left_digits.size() < right_digits.size() ? -1 : 1;
+    }
+    const int result = left_digits.compare(right_digits);
+    if (result != 0)
+    {
+        return result < 0 ? -1 : 1;
+    }
+
+    left_offset = left_end;
+    right_offset = right_end;
+    return 0;
+}
+
 FileEntry build_entry(const std::filesystem::path& path, const std::filesystem::file_status& status,
                       bool follow_symlinks)
 {
@@ -142,72 +194,43 @@ int compare_natural(std::string_view left, std::string_view right)
     // Bytes are compared unsigned: with a signed char, every byte of a
     // multi-byte UTF-8 name (>= 0x80) would compare as negative and sort
     // before ASCII, which puts "Ärger" in front of ".hidden".
-    auto lower = [](char value)
-    { return static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(value))); };
-    auto is_digit = [](char value) { return std::isdigit(static_cast<unsigned char>(value)) != 0; };
-
-    std::size_t i = 0;
-    std::size_t j = 0;
-    while (i < left.size() && j < right.size())
+    std::size_t left_offset = 0;
+    std::size_t right_offset = 0;
+    while (left_offset < left.size() && right_offset < right.size())
     {
-        if (is_digit(left[i]) && is_digit(right[j]))
+        if (is_ascii_digit(left[left_offset]) && is_ascii_digit(right[right_offset]))
         {
-            std::size_t i_end = i;
-            std::size_t j_end = j;
-            while (i_end < left.size() && is_digit(left[i_end]))
+            const int result = compare_digit_runs(left, right, left_offset, right_offset);
+            if (result != 0)
             {
-                ++i_end;
+                return result;
             }
-            while (j_end < right.size() && is_digit(right[j_end]))
-            {
-                ++j_end;
-            }
-
-            std::string_view left_digits = left.substr(i, i_end - i);
-            std::string_view right_digits = right.substr(j, j_end - j);
-            while (left_digits.size() > 1 && left_digits.front() == '0')
-            {
-                left_digits.remove_prefix(1);
-            }
-            while (right_digits.size() > 1 && right_digits.front() == '0')
-            {
-                right_digits.remove_prefix(1);
-            }
-
-            if (left_digits.size() != right_digits.size())
-            {
-                return left_digits.size() < right_digits.size() ? -1 : 1;
-            }
-            const int digits = left_digits.compare(right_digits);
-            if (digits != 0)
-            {
-                return digits < 0 ? -1 : 1;
-            }
-
-            i = i_end;
-            j = j_end;
             continue;
         }
 
-        const unsigned char left_char = lower(left[i]);
-        const unsigned char right_char = lower(right[j]);
+        const unsigned char left_char = ascii_lower(left[left_offset]);
+        const unsigned char right_char = ascii_lower(right[right_offset]);
         if (left_char != right_char)
         {
             return left_char < right_char ? -1 : 1;
         }
-        ++i;
-        ++j;
+        ++left_offset;
+        ++right_offset;
     }
 
-    if (i == left.size() && j == right.size())
+    if (left_offset == left.size() && right_offset == right.size())
     {
         // The folded forms are equal (case or leading-zero difference), so
         // fall back to the raw bytes: this keeps the order a total one, which
         // std::sort needs to stay deterministic across implementations.
         const int raw = left.compare(right);
-        return raw < 0 ? -1 : (raw > 0 ? 1 : 0);
+        if (raw < 0)
+        {
+            return -1;
+        }
+        return raw > 0 ? 1 : 0;
     }
-    return i == left.size() ? -1 : 1;
+    return left_offset == left.size() ? -1 : 1;
 }
 
 Result<std::vector<FileEntry>> list_directory(const std::filesystem::path& directory,
