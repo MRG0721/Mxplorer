@@ -10,7 +10,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <system_error>
 
 namespace mxplorer::cli
 {
@@ -174,38 +173,12 @@ std::vector<std::string> option_candidates(std::string_view command)
     return candidates;
 }
 
-bool starts_with(std::string_view value, std::string_view prefix)
-{
-    return value.size() >= prefix.size() && value.substr(0, prefix.size()) == prefix;
-}
-
-std::size_t utf8_character_length(unsigned char lead)
-{
-    if (lead < 0x80)
-    {
-        return 1;
-    }
-    if (lead >= 0xC2 && lead <= 0xDF)
-    {
-        return 2;
-    }
-    if (lead >= 0xE0 && lead <= 0xEF)
-    {
-        return 3;
-    }
-    if (lead >= 0xF0 && lead <= 0xF4)
-    {
-        return 4;
-    }
-    return 1;
-}
-
 std::size_t common_utf8_prefix(std::string_view left, std::string_view right)
 {
     std::size_t offset = 0;
     while (offset < left.size() && offset < right.size())
     {
-        const std::size_t length = utf8_character_length(static_cast<unsigned char>(left[offset]));
+        const std::size_t length = utf8_sequence_length(static_cast<unsigned char>(left[offset]));
         if (offset + length > left.size() || offset + length > right.size() ||
             left.substr(offset, length) != right.substr(offset, length))
         {
@@ -259,7 +232,7 @@ CompletionResult complete_values(std::size_t begin, std::size_t end, const std::
     std::vector<std::string> display;
     for (const std::string& value : available)
     {
-        if (starts_with(value, prefix))
+        if (value.starts_with(prefix))
         {
             values.push_back(value);
             display.push_back(value);
@@ -310,7 +283,7 @@ CompletionResult complete_path(const Token& token, std::size_t begin, std::size_
     std::vector<std::string> display;
     for (const FileEntry& entry : entries.value())
     {
-        if (!starts_with(entry.name, base))
+        if (!entry.name.starts_with(base))
         {
             continue;
         }

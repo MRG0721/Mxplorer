@@ -100,6 +100,14 @@ std::string long_label(std::string_view name)
     return "--" + std::string(name);
 }
 
+void record_flag(ParsedOptions& parsed, char name)
+{
+    if (parsed.flags.insert(name).second)
+    {
+        parsed.flag_order.push_back(name);
+    }
+}
+
 } // namespace
 
 const std::vector<OptionSpec>& option_specs(std::string_view command)
@@ -157,6 +165,8 @@ ParsedOptions parse_options(const std::vector<std::string>& args, std::string_vi
 
         if (arg.rfind("--", 0) == 0)
         {
+            // Long option name and value are separated by '=' when both are
+            // present in the same argument.
             const std::size_t equals = arg.find('=');
             const std::string name =
                 arg.substr(2, equals == std::string::npos ? std::string::npos : equals - 2);
@@ -169,10 +179,7 @@ ParsedOptions parse_options(const std::vector<std::string>& args, std::string_vi
 
             if (!spec->takes_value)
             {
-                if (parsed.flags.insert(spec->short_name).second)
-                {
-                    parsed.flag_order.push_back(spec->short_name);
-                }
+                record_flag(parsed, spec->short_name);
                 continue;
             }
 
@@ -191,6 +198,8 @@ ParsedOptions parse_options(const std::vector<std::string>& args, std::string_vi
             continue;
         }
 
+        // A group such as -al contains booleans; a value option ends the group
+        // and consumes the rest of this argument, or the next one.
         for (std::size_t offset = 1; offset < arg.size(); ++offset)
         {
             const char name = arg[offset];
@@ -202,10 +211,7 @@ ParsedOptions parse_options(const std::vector<std::string>& args, std::string_vi
             }
             if (!spec->takes_value)
             {
-                if (parsed.flags.insert(name).second)
-                {
-                    parsed.flag_order.push_back(name);
-                }
+                record_flag(parsed, name);
                 continue;
             }
 

@@ -3,21 +3,14 @@
 
 #include "terminal_text_width.hpp"
 
+#include "mxplorer/path_utils.hpp"
+
 #include <algorithm>
 #include <cwchar>
 #include <cwctype>
 
 namespace mxplorer::cli
 {
-namespace
-{
-
-bool is_continuation(unsigned char byte)
-{
-    return (byte & 0xC0) == 0x80;
-}
-
-} // namespace
 
 std::size_t terminal_text_width(std::string_view text, std::size_t begin, std::size_t end)
 {
@@ -81,7 +74,7 @@ std::string terminal_ellipsize_left(std::string_view text, std::size_t max_width
     while (start > 0)
     {
         std::size_t previous = start - 1;
-        while (previous > 0 && is_continuation(static_cast<unsigned char>(text[previous])))
+        while (previous > 0 && is_utf8_continuation(static_cast<unsigned char>(text[previous])))
         {
             --previous;
         }

@@ -15,15 +15,16 @@
 
 #include <algorithm>
 #include <atomic>
+#include <charconv>
 #include <cctype>
+#include <cstdint>
 #include <csignal>
-#include <cstdio>
 #include <format>
 #include <iostream>
+#include <limits>
 #include <optional>
-#include <set>
-#include <stdexcept>
 #include <string_view>
+#include <system_error>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
@@ -45,6 +46,7 @@ constexpr std::string_view kCyan = "\033[36m";
 constexpr std::string_view kDim = "\033[2m";
 constexpr std::string_view kRed = "\033[31m";
 constexpr std::string_view kYellow = "\033[33m";
+constexpr std::size_t kFallbackTerminalWidth = 80;
 
 /// Set from the SIGINT handler, read by the CancelToken given to core.
 std::atomic<bool> g_interrupted{false};
@@ -112,7 +114,7 @@ std::size_t terminal_width(int fd = STDOUT_FILENO)
     {
         return size.ws_col;
     }
-    return 80;
+    return kFallbackTerminalWidth;
 }
 
 /// Splits a line into arguments. Supports 'single' and "double" quotes and
@@ -330,14 +332,14 @@ void print_short_listing(const std::vector<FileEntry>& entries)
     {
         for (std::size_t column = 0; column < columns; ++column)
         {
-            const std::size_t index = column * rows + row;
+            const std::size_t index = (column * rows) + row;
             if (index >= plain.size())
             {
                 continue;
             }
             std::cout << coloured[index];
 
-            const std::size_t next = (column + 1) * rows + row;
+            const std::size_t next = ((column + 1) * rows) + row;
             if (column + 1 < columns && next < plain.size())
             {
                 const std::size_t padding = column_width - terminal_text_width(plain[index]);
@@ -409,14 +411,258 @@ void print_tree(const fs::path& directory, const std::string& prefix, long depth
         if (entry.is_directory())
         {
             ++totals.directories;
-            print_tree(entry.path, prefix + (last ? "    " : "│   "), depth + 1, max_depth, options,
-                       totals);
+            const std::string child_prefix = prefix + (last ? "    " : "│   ");
+            print_tree(entry.path, child_prefix, depth + 1, max_depth, options, totals);
         }
         else
         {
             ++totals.files;
         }
     }
+}
+
+struct SizeFilterArgument
+{
+    bool greater_than = false;
+    std::uintmax_t bytes = 0;
+};
+
+struct AgeFilterArgument
+{
+    bool older_than = false;
+    std::chrono::seconds age{};
+};
+
+std::optional<long long> parse_non_negative_integer(std::string_view text)
+{
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front())) != 0)
+    {
+        text.remove_prefix(1);
+    }
+    if (text.starts_with('+'))
+    {
+        text.remove_prefix(1);
+    }
+    if (text.empty())
+    {
+        return std::nullopt;
+    }
+
+    long long value = 0;
+    const auto result = std::from_chars(text.data(), text.data() + text.size(), value);
+    if (result.ec != std::errc{} || result.ptr != text.data() + text.size() || value < 0)
+    {
+        return std::nullopt;
+    }
+    return value;
+}
+
+/// Parses "+10M" as a strict lower bound and "-10M" as an upper bound.
+std::optional<SizeFilterArgument> parse_size_filter(std::string_view text)
+{
+    if (text.size() < 2 || (text.front() != '+' && text.front() != '-'))
+    {
+        return std::nullopt;
+    }
+
+    std::size_t unit_index = 1;
+    while (unit_index < text.size() &&
+           std::isdigit(static_cast<unsigned char>(text[unit_index])) != 0)
+    {
+        ++unit_index;
+    }
+    if (unit_index == 1)
+    {
+        return std::nullopt;
+    }
+
+    std::uintmax_t value = 0;
+    const auto result = std::from_chars(text.data() + 1, text.data() + unit_index, value);
+    if (result.ec != std::errc{} || result.ptr != text.data() + unit_index)
+    {
+        return std::nullopt;
+    }
+
+    constexpr std::uintmax_t kKiB = 1024ULL;
+    constexpr std::uintmax_t kMiB = kKiB * 1024ULL;
+    constexpr std::uintmax_t kGiB = kMiB * 1024ULL;
+    constexpr std::uintmax_t kTiB = kGiB * 1024ULL;
+
+    std::uintmax_t multiplier = 1;
+    if (unit_index < text.size())
+    {
+        switch (std::toupper(static_cast<unsigned char>(text[unit_index])))
+        {
+            case 'B': multiplier = 1; break;
+            case 'K': multiplier = kKiB; break;
+            case 'M': multiplier = kMiB; break;
+            case 'G': multiplier = kGiB; break;
+            case 'T': multiplier = kTiB; break;
+            default: return std::nullopt;
+        }
+        ++unit_index;
+        if (unit_index < text.size() &&
+            std::toupper(static_cast<unsigned char>(text[unit_index])) == 'B')
+        {
+            ++unit_index;
+        }
+    }
+
+    const bool has_valid_range = unit_index == text.size() &&
+                                 value <= std::numeric_limits<std::uintmax_t>::max() / multiplier;
+    if (!has_valid_range)
+    {
+        return std::nullopt;
+    }
+    return SizeFilterArgument{text.front() == '+', value * multiplier};
+}
+
+/// Parses "+7d" as an older-than filter and "-12h" as a newer-than filter.
+std::optional<AgeFilterArgument> parse_age_filter(std::string_view text)
+{
+    if (text.size() < 3 || (text.front() != '+' && text.front() != '-'))
+    {
+        return std::nullopt;
+    }
+
+    constexpr long long kMaxUnits = 1'000'000'000LL;
+    long long value = 0;
+    for (std::size_t index = 1; index + 1 < text.size(); ++index)
+    {
+        if (std::isdigit(static_cast<unsigned char>(text[index])) == 0)
+        {
+            return std::nullopt;
+        }
+        value = (value * 10) + (text[index] - '0');
+        if (value > kMaxUnits)
+        {
+            return std::nullopt;
+        }
+    }
+
+    constexpr long long kSecondsPerMinute = 60;
+    constexpr long long kMinutesPerHour = 60;
+    constexpr long long kHoursPerDay = 24;
+
+    std::chrono::seconds age{};
+    switch (text.back())
+    {
+        case 's': age = std::chrono::seconds(value); break;
+        case 'm': age = std::chrono::seconds(value * kSecondsPerMinute); break;
+        case 'h': age = std::chrono::seconds(value * kSecondsPerMinute * kMinutesPerHour); break;
+        case 'd':
+            age = std::chrono::seconds(value * kSecondsPerMinute * kMinutesPerHour * kHoursPerDay);
+            break;
+        default: return std::nullopt;
+    }
+    return AgeFilterArgument{text.front() == '+', age};
+}
+
+/// Applies parsed --name=value and boolean flags to the core search options.
+Error apply_find_options(const ParsedOptions& parsed, SearchOptions& options, bool& long_format)
+{
+    for (const char flag : parsed.flag_order)
+    {
+        switch (flag)
+        {
+            case 'i': options.case_sensitive = false; break;
+            case 'E': options.mode = MatchMode::regex; break;
+            case 'F': options.mode = MatchMode::substring; break;
+            case 'l': long_format = true; break;
+            case 'a': options.include_hidden = true; break;
+            default: break;
+        }
+    }
+
+    if (const auto type = parsed.values.find('t'); type != parsed.values.end())
+    {
+        if (type->second == "f")
+        {
+            options.filter = EntryFilter::file;
+        }
+        else if (type->second == "d")
+        {
+            options.filter = EntryFilter::directory;
+        }
+        else if (type->second == "l")
+        {
+            options.filter = EntryFilter::symlink;
+        }
+        else
+        {
+            return Error(ErrorCode::invalid_argument,
+                         "find: --type expects f, d or l, got '" + type->second + "'");
+        }
+    }
+
+    if (const auto depth_value = parsed.values.find('d'); depth_value != parsed.values.end())
+    {
+        const std::optional<long long> depth = parse_non_negative_integer(depth_value->second);
+        if (!depth)
+        {
+            return Error(ErrorCode::invalid_argument, "find: --depth expects a non-negative depth");
+        }
+        if (*depth > std::numeric_limits<int>::max())
+        {
+            return Error(ErrorCode::invalid_argument, "find: --depth is too large");
+        }
+        options.max_depth = static_cast<int>(*depth);
+    }
+
+    if (const auto limit = parsed.values.find('n'); limit != parsed.values.end())
+    {
+        const std::optional<long long> value = parse_non_negative_integer(limit->second);
+        if (!value)
+        {
+            return Error(ErrorCode::invalid_argument,
+                         "find: --limit expects a non-negative number");
+        }
+        options.max_results = static_cast<std::size_t>(*value);
+    }
+
+    if (const auto content = parsed.values.find('c'); content != parsed.values.end())
+    {
+        options.content_pattern = content->second;
+    }
+
+    if (const auto size = parsed.values.find('s'); size != parsed.values.end())
+    {
+        const std::optional<SizeFilterArgument> filter = parse_size_filter(size->second);
+        if (!filter)
+        {
+            return Error(ErrorCode::invalid_argument,
+                         "find: --size expects +N or -N with an optional K/M/G/T unit, "
+                         "for example --size +10M");
+        }
+        if (filter->greater_than)
+        {
+            options.size_greater_than = filter->bytes;
+        }
+        else
+        {
+            options.size_less_than = filter->bytes;
+        }
+    }
+
+    if (const auto modified = parsed.values.find('m'); modified != parsed.values.end())
+    {
+        const std::optional<AgeFilterArgument> filter = parse_age_filter(modified->second);
+        if (!filter)
+        {
+            return Error(ErrorCode::invalid_argument,
+                         "find: --modified expects +N or -N with a d/h/m/s unit, "
+                         "for example --modified +7d");
+        }
+        if (filter->older_than)
+        {
+            options.older_than = filter->age;
+        }
+        else
+        {
+            options.newer_than = filter->age;
+        }
+    }
+    return Error{};
 }
 
 } // namespace
@@ -426,7 +672,7 @@ std::string_view version()
     return MXPLORER_VERSION;
 }
 
-Shell::Shell() : session_()
+Shell::Shell()
 {
     register_commands();
 }
@@ -660,7 +906,7 @@ int Shell::run_command(const std::vector<std::string>& args)
     return status;
 }
 
-void Shell::print_banner() const
+void Shell::print_banner()
 {
     std::cout << std::format(
         "mxplorer {} | type 'help' for commands, Tab completes, 'exit' to quit\n", version());
@@ -775,7 +1021,7 @@ int Shell::cmd_ls(const Args& args)
     const fs::path path = session_.resolve(target);
 
     ListOptions options;
-    options.include_hidden = parsed.flags.count('a') > 0;
+    options.include_hidden = parsed.flags.contains('a');
     options.on_entry_error = [](const Error& error) { print_warning(error); };
 
     const Result<std::vector<FileEntry>> result = list_directory(path, options);
@@ -791,7 +1037,7 @@ int Shell::cmd_ls(const Args& args)
         return 0;
     }
 
-    if (parsed.flags.count('l') > 0)
+    if (parsed.flags.contains('l'))
     {
         print_long_listing(entries);
     }
@@ -833,8 +1079,9 @@ int Shell::cmd_pwd(const Args& args)
     return 0;
 }
 
-int Shell::copy_or_move(const Args& args, bool move, const std::string& command)
+int Shell::transfer_paths(const Args& args, TransferMode mode, const std::string& command)
 {
+    const bool is_move = mode == TransferMode::move;
     const ParsedOptions parsed = parse_options(args, command);
     if (!parsed.missing_value.empty())
     {
@@ -860,9 +1107,9 @@ int Shell::copy_or_move(const Args& args, bool move, const std::string& command)
     }
 
     OperationOptions options;
-    options.overwrite = parsed.flags.count('f') > 0;
-    options.recursive = parsed.flags.count('r') > 0 || move;
-    options.preserve_permissions = parsed.flags.count('p') > 0;
+    options.overwrite = parsed.flags.contains('f');
+    options.recursive = parsed.flags.contains('r') || is_move;
+    options.preserve_permissions = parsed.flags.contains('p');
     options.is_cancelled = interrupt_token();
 
     int status = 0;
@@ -870,11 +1117,11 @@ int Shell::copy_or_move(const Args& args, bool move, const std::string& command)
     {
         const fs::path source = session_.resolve(source_arg);
 
-        LineProgress progress(move ? "moving" : "copying");
+        LineProgress progress(is_move ? "moving" : "copying");
         options.on_progress = std::ref(progress);
 
-        const Error result = move ? move_path(source, destination, options)
-                                  : copy_path(source, destination, options);
+        const Error result = is_move ? move_path(source, destination, options)
+                                     : copy_path(source, destination, options);
         progress.clear();
 
         if (!result.ok())
@@ -884,7 +1131,7 @@ int Shell::copy_or_move(const Args& args, bool move, const std::string& command)
             continue;
         }
 
-        std::cout << paint(move ? "moved" : "copied", kDim) << ' ' << to_utf8(source) << " -> "
+        std::cout << paint(is_move ? "moved" : "copied", kDim) << ' ' << to_utf8(source) << " -> "
                   << to_utf8(destination) << '\n';
     }
     return status;
@@ -892,12 +1139,12 @@ int Shell::copy_or_move(const Args& args, bool move, const std::string& command)
 
 int Shell::cmd_cp(const Args& args)
 {
-    return copy_or_move(args, false, "cp");
+    return transfer_paths(args, TransferMode::copy, "cp");
 }
 
 int Shell::cmd_mv(const Args& args)
 {
-    return copy_or_move(args, true, "mv");
+    return transfer_paths(args, TransferMode::move, "mv");
 }
 
 int Shell::cmd_rm(const Args& args)
@@ -917,8 +1164,8 @@ int Shell::cmd_rm(const Args& args)
     }
 
     OperationOptions options;
-    options.recursive = parsed.flags.count('r') > 0;
-    options.ignore_missing = parsed.flags.count('f') > 0;
+    options.recursive = parsed.flags.contains('r');
+    options.ignore_missing = parsed.flags.contains('f');
     options.is_cancelled = interrupt_token();
 
     int status = 0;
@@ -965,7 +1212,7 @@ int Shell::cmd_mkdir(const Args& args)
         return fail("mkdir: needs at least one path");
     }
 
-    const bool parents = parsed.flags.count('p') > 0;
+    const bool parents = parsed.flags.contains('p');
 
     int status = 0;
     for (const std::string& target_arg : parsed.positional)
@@ -1046,25 +1293,6 @@ int Shell::cmd_tree(const Args& args)
     std::string target = ".";
     long max_depth = -1;
 
-    auto parse_depth = [](const std::string& text, long& depth)
-    {
-        try
-        {
-            std::size_t consumed = 0;
-            const long value = std::stol(text, &consumed);
-            if (consumed != text.size() || value < 0)
-            {
-                return false;
-            }
-            depth = value;
-            return true;
-        }
-        catch (const std::exception&)
-        {
-            return false;
-        }
-    };
-
     const ParsedOptions parsed = parse_options(args, "tree");
     if (!parsed.missing_value.empty())
     {
@@ -1079,10 +1307,12 @@ int Shell::cmd_tree(const Args& args)
 
     if (const auto depth = parsed.values.find('L'); depth != parsed.values.end())
     {
-        if (!parse_depth(depth->second, max_depth))
+        const std::optional<long long> parsed_depth = parse_non_negative_integer(depth->second);
+        if (!parsed_depth || *parsed_depth > std::numeric_limits<long>::max())
         {
             return fail("tree: invalid depth '" + depth->second + "'");
         }
+        max_depth = static_cast<long>(*parsed_depth);
     }
 
     if (parsed.positional.size() > 1)
@@ -1122,114 +1352,6 @@ int Shell::cmd_find(const Args& args)
     SearchOptions options;
     bool long_format = false;
 
-    const auto parse_number = [](const std::string& text, long long& value)
-    {
-        try
-        {
-            std::size_t consumed = 0;
-            const long long parsed = std::stoll(text, &consumed);
-            if (consumed != text.size() || parsed < 0)
-            {
-                return false;
-            }
-            value = parsed;
-            return true;
-        }
-        catch (const std::exception&)
-        {
-            return false;
-        }
-    };
-
-    // "+10M" is larger than 10 MiB, "-10M" is smaller.
-    const auto parse_size = [](const std::string& text, bool& greater, std::uintmax_t& bytes)
-    {
-        if (text.size() < 2 || (text.front() != '+' && text.front() != '-'))
-        {
-            return false;
-        }
-        greater = text.front() == '+';
-
-        std::size_t index = 1;
-        std::uintmax_t value = 0;
-        bool any_digit = false;
-        while (index < text.size() && std::isdigit(static_cast<unsigned char>(text[index])) != 0)
-        {
-            const std::uintmax_t digit = static_cast<std::uintmax_t>(text[index] - '0');
-            if (value > (std::numeric_limits<std::uintmax_t>::max() - digit) / 10)
-            {
-                return false;
-            }
-            value = value * 10 + digit;
-            any_digit = true;
-            ++index;
-        }
-        if (!any_digit)
-        {
-            return false;
-        }
-
-        std::uintmax_t multiplier = 1;
-        if (index < text.size())
-        {
-            switch (std::toupper(static_cast<unsigned char>(text[index])))
-            {
-                case 'B': multiplier = 1ULL; break;
-                case 'K': multiplier = 1024ULL; break;
-                case 'M': multiplier = 1024ULL * 1024; break;
-                case 'G': multiplier = 1024ULL * 1024 * 1024; break;
-                case 'T': multiplier = 1024ULL * 1024 * 1024 * 1024; break;
-                default: return false;
-            }
-            ++index;
-            if (index < text.size() && std::toupper(static_cast<unsigned char>(text[index])) == 'B')
-            {
-                ++index;
-            }
-        }
-        if (index != text.size() || value > std::numeric_limits<std::uintmax_t>::max() / multiplier)
-        {
-            return false;
-        }
-
-        bytes = value * multiplier;
-        return true;
-    };
-
-    // "+7d" is older than seven days, "-12h" is more recent than twelve hours.
-    const auto parse_age = [](const std::string& text, bool& older, std::chrono::seconds& age)
-    {
-        if (text.size() < 3 || (text.front() != '+' && text.front() != '-'))
-        {
-            return false;
-        }
-        older = text.front() == '+';
-
-        long long value = 0;
-        for (std::size_t index = 1; index + 1 < text.size(); ++index)
-        {
-            if (std::isdigit(static_cast<unsigned char>(text[index])) == 0)
-            {
-                return false;
-            }
-            value = value * 10 + (text[index] - '0');
-            if (value > 1000000000LL)
-            {
-                return false;
-            }
-        }
-
-        switch (text.back())
-        {
-            case 's': age = std::chrono::seconds(value); break;
-            case 'm': age = std::chrono::minutes(value); break;
-            case 'h': age = std::chrono::hours(value); break;
-            case 'd': age = std::chrono::hours(24 * value); break;
-            default: return false;
-        }
-        return true;
-    };
-
     const ParsedOptions parsed = parse_options(args, "find");
     if (!parsed.missing_value.empty())
     {
@@ -1240,104 +1362,9 @@ int Shell::cmd_find(const Args& args)
         return usage_error("find", parsed.unknown);
     }
 
-    for (const char flag : parsed.flag_order)
+    if (const Error error = apply_find_options(parsed, options, long_format); !error.ok())
     {
-        switch (flag)
-        {
-            case 'i': options.case_sensitive = false; break;
-            case 'E': options.mode = MatchMode::regex; break;
-            case 'F': options.mode = MatchMode::substring; break;
-            case 'l': long_format = true; break;
-            case 'a': options.include_hidden = true; break;
-            default: break;
-        }
-    }
-
-    if (const auto type = parsed.values.find('t'); type != parsed.values.end())
-    {
-        if (type->second == "f")
-        {
-            options.filter = EntryFilter::file;
-        }
-        else if (type->second == "d")
-        {
-            options.filter = EntryFilter::directory;
-        }
-        else if (type->second == "l")
-        {
-            options.filter = EntryFilter::symlink;
-        }
-        else
-        {
-            return fail("find: --type expects f, d or l, got '" + type->second + "'");
-        }
-    }
-
-    if (const auto depth_value = parsed.values.find('d'); depth_value != parsed.values.end())
-    {
-        long long depth = 0;
-        if (!parse_number(depth_value->second, depth))
-        {
-            return fail("find: --depth expects a non-negative depth");
-        }
-        if (depth > std::numeric_limits<int>::max())
-        {
-            return fail("find: --depth is too large");
-        }
-        options.max_depth = static_cast<int>(depth);
-    }
-
-    if (const auto limit = parsed.values.find('n'); limit != parsed.values.end())
-    {
-        long long value = 0;
-        if (!parse_number(limit->second, value))
-        {
-            return fail("find: --limit expects a non-negative number");
-        }
-        options.max_results = static_cast<std::size_t>(value);
-    }
-
-    if (const auto content = parsed.values.find('c'); content != parsed.values.end())
-    {
-        options.content_pattern = content->second;
-    }
-
-    if (const auto size = parsed.values.find('s'); size != parsed.values.end())
-    {
-        bool greater = false;
-        std::uintmax_t bytes = 0;
-        if (!parse_size(size->second, greater, bytes))
-        {
-            return fail("find: --size expects +N or -N with an optional K/M/G/T unit, "
-                        "for example --size +10M");
-        }
-        if (greater)
-        {
-            options.size_greater_than = bytes;
-        }
-        else
-        {
-            options.size_less_than = bytes;
-        }
-    }
-
-    if (const auto modified = parsed.values.find('m'); modified != parsed.values.end())
-    {
-        bool older = false;
-        std::chrono::seconds age{};
-        if (!parse_age(modified->second, older, age))
-        {
-            return fail("find: --modified expects +N or -N with a d/h/m/s unit, "
-                        "for example --modified +7d");
-        }
-        if (older)
-        {
-            options.older_than = age;
-        }
-        else
-        {
-            options.newer_than = age;
-        }
+        return fail(error);
     }
 
     if (parsed.positional.empty())

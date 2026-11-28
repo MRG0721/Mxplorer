@@ -3,12 +3,12 @@
 
 #include "line_editor.hpp"
 
+#include "mxplorer/path_utils.hpp"
 #include "terminal_text_width.hpp"
 
 #include <algorithm>
 #include <cerrno>
 #include <csignal>
-#include <cstdio>
 #include <format>
 #include <iostream>
 #include <iterator>
@@ -23,11 +23,22 @@ namespace mxplorer::cli
 namespace
 {
 
+constexpr std::size_t kFallbackTerminalWidth = 80;
+constexpr int kEscapeSequenceTimeoutMilliseconds = 40;
+constexpr int kHandledEditorSignals[] = {SIGINT, SIGTERM, SIGHUP, SIGQUIT};
+
 volatile std::sig_atomic_t g_editor_signal = 0;
 
 void on_editor_signal(int signal_number)
 {
     g_editor_signal = signal_number;
+}
+
+LineReadResult pending_signal_result()
+{
+    const LineReadStatus status =
+        g_editor_signal == SIGINT ? LineReadStatus::interrupted : LineReadStatus::terminated;
+    return {status, {}};
 }
 
 class TerminalGuard
@@ -79,10 +90,9 @@ public:
         ::sigemptyset(&action.sa_mask);
         action.sa_flags = 0;
 
-        const int signals[] = {SIGINT, SIGTERM, SIGHUP, SIGQUIT};
-        for (std::size_t i = 0; i < std::size(signals); ++i)
+        for (std::size_t i = 0; i < std::size(kHandledEditorSignals); ++i)
         {
-            if (::sigaction(signals[i], &action, &saved_[i]) == 0)
+            if (::sigaction(kHandledEditorSignals[i], &action, &saved_[i]) == 0)
             {
                 installed_[i] = true;
             }
@@ -91,12 +101,11 @@ public:
 
     ~SignalGuard()
     {
-        const int signals[] = {SIGINT, SIGTERM, SIGHUP, SIGQUIT};
-        for (std::size_t i = 0; i < std::size(signals); ++i)
+        for (std::size_t i = 0; i < std::size(kHandledEditorSignals); ++i)
         {
             if (installed_[i])
             {
-                ::sigaction(signals[i], &saved_[i], nullptr);
+                ::sigaction(kHandledEditorSignals[i], &saved_[i], nullptr);
             }
         }
     }
@@ -135,35 +144,7 @@ std::size_t terminal_width()
     {
         return size.ws_col;
     }
-    return 80;
-}
-
-std::size_t previous_character(std::string_view line, std::size_t cursor)
-{
-    if (cursor == 0)
-    {
-        return 0;
-    }
-    --cursor;
-    while (cursor > 0 && (static_cast<unsigned char>(line[cursor]) & 0xC0) == 0x80)
-    {
-        --cursor;
-    }
-    return cursor;
-}
-
-std::size_t next_character(std::string_view line, std::size_t cursor)
-{
-    if (cursor >= line.size())
-    {
-        return line.size();
-    }
-    ++cursor;
-    while (cursor < line.size() && (static_cast<unsigned char>(line[cursor]) & 0xC0) == 0x80)
-    {
-        ++cursor;
-    }
-    return cursor;
+    return kFallbackTerminalWidth;
 }
 
 void render(std::string_view prompt, std::string_view line, std::size_t cursor)
@@ -212,13 +193,68 @@ void print_candidates(std::string_view prompt, std::string_view line, std::size_
 bool read_with_timeout(char& character)
 {
     struct pollfd descriptor{STDIN_FILENO, POLLIN, 0};
-    if (::poll(&descriptor, 1, 40) <= 0)
+    if (::poll(&descriptor, 1, kEscapeSequenceTimeoutMilliseconds) <= 0)
     {
         return false;
     }
 
     const ssize_t count = ::read(STDIN_FILENO, &character, 1);
     return count == 1;
+}
+
+/// Applies a recognized ANSI cursor/editing sequence. Returns true when the
+/// caller should repaint the edited line.
+bool apply_escape_sequence(std::string& line, std::size_t& cursor)
+{
+    char sequence_kind = 0;
+    if (!read_with_timeout(sequence_kind) || (sequence_kind != '[' && sequence_kind != 'O'))
+    {
+        return false;
+    }
+
+    char code = 0;
+    if (!read_with_timeout(code))
+    {
+        return false;
+    }
+
+    if (code == 'C')
+    {
+        cursor = next_utf8_boundary(line, cursor);
+    }
+    else if (code == 'D')
+    {
+        cursor = previous_utf8_boundary(line, cursor);
+    }
+    else if (code == 'H')
+    {
+        cursor = 0;
+    }
+    else if (code == 'F')
+    {
+        cursor = line.size();
+    }
+    else if (code == '3' || code == '1' || code == '4' || code == '7' || code == '8')
+    {
+        char terminator = 0;
+        if (!read_with_timeout(terminator) || terminator != '~')
+        {
+            return false;
+        }
+        if (code == '3' && cursor < line.size())
+        {
+            line.erase(cursor, next_utf8_boundary(line, cursor) - cursor);
+        }
+        else if (code == '1' || code == '7')
+        {
+            cursor = 0;
+        }
+        else if (code == '4' || code == '8')
+        {
+            cursor = line.size();
+        }
+    }
+    return true;
 }
 
 void apply_completion(std::string& line, std::size_t& cursor, std::string_view prompt,
@@ -270,7 +306,7 @@ void delete_previous_word(std::string& line, std::size_t& cursor)
     }
     while (begin > 0 && line[begin - 1] != ' ')
     {
-        begin = previous_character(line, begin);
+        begin = previous_utf8_boundary(line, begin);
     }
     line.erase(begin, cursor - begin);
     cursor = begin;
@@ -303,9 +339,7 @@ LineReadResult read_line(std::string_view prompt, const CompletionContext& conte
     {
         if (g_editor_signal != 0)
         {
-            return {g_editor_signal == SIGINT ? LineReadStatus::interrupted
-                                              : LineReadStatus::terminated,
-                    {}};
+            return pending_signal_result();
         }
 
         char character = 0;
@@ -316,9 +350,7 @@ LineReadResult read_line(std::string_view prompt, const CompletionContext& conte
             {
                 if (g_editor_signal != 0)
                 {
-                    return {g_editor_signal == SIGINT ? LineReadStatus::interrupted
-                                                      : LineReadStatus::terminated,
-                            {}};
+                    return pending_signal_result();
                 }
                 return {LineReadStatus::interrupted, {}};
             }
@@ -348,7 +380,7 @@ LineReadResult read_line(std::string_view prompt, const CompletionContext& conte
             }
             if (cursor < line.size())
             {
-                line.erase(cursor, next_character(line, cursor) - cursor);
+                line.erase(cursor, next_utf8_boundary(line, cursor) - cursor);
                 render(prompt, line, cursor);
             }
             continue;
@@ -357,7 +389,7 @@ LineReadResult read_line(std::string_view prompt, const CompletionContext& conte
         {
             if (cursor > 0)
             {
-                const std::size_t begin = previous_character(line, cursor);
+                const std::size_t begin = previous_utf8_boundary(line, cursor);
                 line.erase(begin, cursor - begin);
                 cursor = begin;
                 render(prompt, line, cursor);
@@ -378,13 +410,13 @@ LineReadResult read_line(std::string_view prompt, const CompletionContext& conte
         }
         if (character == 0x02) // Ctrl-B
         {
-            cursor = previous_character(line, cursor);
+            cursor = previous_utf8_boundary(line, cursor);
             render(prompt, line, cursor);
             continue;
         }
         if (character == 0x06) // Ctrl-F
         {
-            cursor = next_character(line, cursor);
+            cursor = next_utf8_boundary(line, cursor);
             render(prompt, line, cursor);
             continue;
         }
@@ -415,54 +447,8 @@ LineReadResult read_line(std::string_view prompt, const CompletionContext& conte
         }
         if (character == 0x1b)
         {
-            char next = 0;
-            if (!read_with_timeout(next))
+            if (apply_escape_sequence(line, cursor))
             {
-                continue;
-            }
-            if (next == '[' || next == 'O')
-            {
-                char code = 0;
-                if (!read_with_timeout(code))
-                {
-                    continue;
-                }
-                if (code == 'C')
-                {
-                    cursor = next_character(line, cursor);
-                }
-                else if (code == 'D')
-                {
-                    cursor = previous_character(line, cursor);
-                }
-                else if (code == 'H')
-                {
-                    cursor = 0;
-                }
-                else if (code == 'F')
-                {
-                    cursor = line.size();
-                }
-                else if (code == '3' || code == '1' || code == '4' || code == '7' || code == '8')
-                {
-                    char terminator = 0;
-                    if (!read_with_timeout(terminator) || terminator != '~')
-                    {
-                        continue;
-                    }
-                    if (code == '3' && cursor < line.size())
-                    {
-                        line.erase(cursor, next_character(line, cursor) - cursor);
-                    }
-                    else if (code == '1' || code == '7')
-                    {
-                        cursor = 0;
-                    }
-                    else if (code == '4' || code == '8')
-                    {
-                        cursor = line.size();
-                    }
-                }
                 render(prompt, line, cursor);
             }
             continue;

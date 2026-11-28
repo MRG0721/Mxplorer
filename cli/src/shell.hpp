@@ -37,6 +37,12 @@ private:
     using Args = std::vector<std::string>;
     using Handler = std::function<int(const Args&)>;
 
+    enum class TransferMode
+    {
+        copy,
+        move,
+    };
+
     struct Command
     {
         std::string usage;
@@ -47,13 +53,13 @@ private:
     };
 
     void register_commands();
-    void print_banner() const;
+    static void print_banner();
     void print_prompt() const;
     void print_help() const;
     std::string prompt_text() const;
 
-    int fail(const Error& error);
-    int fail(const std::string& message);
+    static int fail(const Error& error);
+    static int fail(const std::string& message);
     int usage_error(const std::string& command, const std::vector<std::string>& unknown_options);
 
     int cmd_help(const Args& args);
@@ -67,11 +73,11 @@ private:
     int cmd_stat(const Args& args);
     int cmd_tree(const Args& args);
     int cmd_find(const Args& args);
-    int cmd_clear(const Args& args);
+    static int cmd_clear(const Args& args);
     int cmd_exit(const Args& args);
 
     /// Shared implementation of cp and mv.
-    int copy_or_move(const Args& args, bool move, const std::string& command);
+    int transfer_paths(const Args& args, TransferMode mode, const std::string& command);
 
     Session session_;
     std::map<std::string, Command> commands_;
