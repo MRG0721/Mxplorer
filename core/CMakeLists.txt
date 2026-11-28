@@ -12,9 +12,4 @@ add_library(mxplorer_core STATIC
 
 target_include_directories(mxplorer_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(mxplorer_core PRIVATE -Wall -Wextra -Wpedantic)
-    if(MXPLORER_WARNINGS_AS_ERRORS)
-        target_compile_options(mxplorer_core PRIVATE -Werror)
-    endif()
-endif()
+mxplorer_enable_warnings(mxplorer_core)

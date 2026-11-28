@@ -15,11 +15,6 @@ target_compile_definitions(mxplorer_cli PRIVATE MXPLORER_VERSION="${MXPLORER_VER
 
 install(TARGETS mxplorer_cli RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(mxplorer_cli PRIVATE -Wall -Wextra -Wpedantic)
-    if(MXPLORER_WARNINGS_AS_ERRORS)
-        target_compile_options(mxplorer_cli PRIVATE -Werror)
-    endif()
-endif()
+mxplorer_enable_warnings(mxplorer_cli)
 
 set_target_properties(mxplorer_cli PROPERTIES OUTPUT_NAME mxplorer)
